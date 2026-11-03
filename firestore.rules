@@ -1,0 +1,10 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Locked until we ship real authentication, verified pair enrollment
+    // and end-to-end encrypted sync. A random document ID is NOT access control.
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

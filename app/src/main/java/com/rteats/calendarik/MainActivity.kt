@@ -53,6 +53,7 @@ import com.rteats.calendarik.data.CalendarDatabase
 import com.rteats.calendarik.data.CalendarEvent
 import com.rteats.calendarik.data.createOrEditEvent
 import com.rteats.calendarik.data.deleteEvent
+import com.rteats.calendarik.ui.DayReactionsPanel
 import com.rteats.calendarik.update.GithubUpdater
 import com.rteats.calendarik.update.UpdateManifest
 import com.rteats.calendarik.widget.refreshWidgets
@@ -105,6 +106,8 @@ private fun CalendarikScreen() {
     val limits = remember(day) { range(day) }
     val stream = remember(limits) { db.events().observeRange(limits.first, limits.second) }
     val events by stream.collectAsState(initial = emptyList())
+    val reactionStream = remember(day) { db.reactions().observeDay(day.toEpochDay()) }
+    val reactions by reactionStream.collectAsState(initial = emptyList())
     var editing by remember { mutableStateOf<CalendarEvent?>(null) }
     var showEditor by remember { mutableStateOf(false) }
     var updateDialog by remember { mutableStateOf(false) }
@@ -200,8 +203,28 @@ private fun CalendarikScreen() {
                     }
                 }
             }
+            DayReactionsPanel(
+                reactions = reactions,
+                actingAs = identity,
+                onHeart = { color ->
+                    scope.launch {
+                        runCatching {
+                            db.reactions().addHeart(day.toEpochDay(), identity, color)
+                            refreshWidgets(context)
+                        }.onFailure { savingError = it.message ?: "Не удалось добавить сердечко" }
+                    }
+                },
+                onMood = { emoji ->
+                    scope.launch {
+                        runCatching {
+                            db.reactions().setMood(day.toEpochDay(), identity, emoji)
+                            refreshWidgets(context)
+                        }.onFailure { savingError = it.message ?: "Не удалось сохранить эмоцию" }
+                    }
+                },
+            )
             Text(
-                "Пока данные хранятся только на этом устройстве. Сетевая синхронизация будет добавлена после настройки Firebase.",
+                "Сейчас данные локальные. Firebase подключён как SDK; обмен между устройствами пока выключен.",
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 style = MaterialTheme.typography.labelSmall,
                 modifier = Modifier.padding(bottom = 8.dp),

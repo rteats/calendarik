@@ -45,7 +45,7 @@ jobs:
             echo "CALENDARIK_KEYSTORE_FILE=$RUNNER_TEMP/calendarik-release.p12" >> "$GITHUB_ENV"
             echo "enabled=true" >> "$GITHUB_OUTPUT"
           else
-            echo "No release key configured. A preview APK will be built; it MUST NOT be used for permanent data."
+            echo "No release key configured. A debug APK will be built; it uses an ephemeral signing identity and MUST NOT be used for permanent data."
             echo "enabled=false" >> "$GITHUB_OUTPUT"
           fi
       - name: Build preview APK without signing secrets

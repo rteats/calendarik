@@ -2,6 +2,7 @@ plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.plugin.compose")
     id("com.google.devtools.ksp")
+    id("com.google.gms.google-services")
 }
 
 val buildCode = providers.gradleProperty("VERSION_CODE").orNull?.toIntOrNull() ?: 1
@@ -38,7 +39,8 @@ android {
     }
     buildTypes {
         debug {
-            applicationIdSuffix = ".debug"
+            // Firebase config currently registers com.rteats.calendarik only.
+            // A debug APK still cannot update the signed release because its certificate differs.
             versionNameSuffix = "-debug"
         }
         release {
@@ -82,6 +84,9 @@ dependencies {
     implementation("androidx.room:room-runtime:2.8.5")
     implementation("androidx.room:room-ktx:2.8.5")
     ksp("androidx.room:room-compiler:2.8.5")
+    implementation(platform("com.google.firebase:firebase-bom:35.1.0"))
+    implementation("com.google.firebase:firebase-auth")
+    implementation("com.google.firebase:firebase-firestore")
     implementation("androidx.glance:glance-appwidget:1.2.0")
     implementation("androidx.glance:glance-material3:1.2.0")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.2")

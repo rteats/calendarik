@@ -34,6 +34,7 @@ class AgendaWidget : GlanceAppWidget() {
         val start = day.atStartOfDay(zone).toInstant().toEpochMilli()
         val end = day.plusDays(1).atStartOfDay(zone).toInstant().toEpochMilli()
         val events = CalendarDatabase.get(context).events().listForRange(start, end).take(5)
+        val reactions = CalendarDatabase.get(context).reactions().forDay(day.toEpochDay())
         val timeFormat = DateTimeFormatter.ofPattern("HH:mm")
         val lines = events.map { item ->
             Instant.ofEpochMilli(item.startsAtMillis).atZone(zone).format(timeFormat) +
@@ -43,6 +44,16 @@ class AgendaWidget : GlanceAppWidget() {
             Column(modifier = GlanceModifier.fillMaxSize().padding(12.dp).clickable(actionStartActivity(Intent(context, MainActivity::class.java)))) {
                 Text("Календарик · Сегодня", style = TextStyle(fontSize = 16.sp))
                 Spacer(GlanceModifier.height(8.dp))
+                val summaries = listOf(Authors.SASHA, Authors.NASTYA).map { author ->
+                    val reaction = reactions.firstOrNull { it.authorId == author }
+                    Authors.label(author) + ": ❤️ " + (reaction?.redHearts ?: 0) +
+                        " 🩷 " + (reaction?.pinkHearts ?: 0) + " " + (reaction?.dayEmoji ?: "")
+                }
+                summaries.forEach { summary ->
+                    Text(summary, style = TextStyle(fontSize = 12.sp))
+                    Spacer(GlanceModifier.height(4.dp))
+                }
+                Spacer(GlanceModifier.height(6.dp))
                 if (lines.isEmpty()) {
                     Text("На сегодня событий нет")
                 } else {
