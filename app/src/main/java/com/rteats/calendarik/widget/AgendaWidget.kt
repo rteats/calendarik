@@ -58,7 +58,6 @@ import java.time.LocalDate
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.util.Locale
-import androidx.compose.ui.unit.DpSize
 
 object WidgetNavigation {
     const val EXTRA_DAY = "calendarik_widget_day"
@@ -94,9 +93,7 @@ private val timeFormatter = DateTimeFormatter.ofPattern("HH:mm")
 
 /** One responsive, navigable day agenda. Each installed widget stores its own day offset. */
 class AgendaWidget : GlanceAppWidget() {
-    override val sizeMode: SizeMode = SizeMode.Responsive(
-        setOf(DpSize(180.dp, 110.dp), DpSize(250.dp, 175.dp), DpSize(320.dp, 240.dp))
-    )
+    override val sizeMode: SizeMode = SizeMode.Exact
 
     override suspend fun provideGlance(context: Context, id: GlanceId) {
         val state = getAppWidgetState(context, PreferencesGlanceStateDefinition, id)
@@ -125,7 +122,7 @@ private fun AgendaContent(
     zone: ZoneId,
 ) {
     val size = LocalSize.current
-    val compact = size.height < 165.dp
+    val compact = size.height < 200.dp
     val maxEvents = when {
         size.height < 200.dp -> 1
         size.height < 290.dp -> 2
@@ -187,7 +184,7 @@ private fun AgendaContent(
                 }
             }
         }
-        if (!compact) {
+        if (size.height >= 200.dp) {
             Spacer(GlanceModifier.height(8.dp))
             Row(modifier = GlanceModifier.fillMaxWidth()) {
                 listOf(Authors.SASHA, Authors.NASTYA).forEach { author ->
@@ -217,6 +214,7 @@ private fun AgendaContent(
                 }
             }
         }
+        if (size.height >= 150.dp) {
         Spacer(GlanceModifier.height(if (compact) 7.dp else 10.dp))
         Row(modifier = GlanceModifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             Text("Планы", modifier = GlanceModifier.defaultWeight(),
@@ -244,6 +242,7 @@ private fun AgendaContent(
                     .clickable(actionStartActivity(WidgetNavigation.intent(context, day))),
                     style = TextStyle(color = ColorProvider(violet), fontSize = 11.sp))
             }
+        }
         }
     }
 }
