@@ -66,6 +66,10 @@ class PairVault(context: Context) {
 
     fun save(pair: LocalPair) {
         require(pair.key.size == 32 && pair.role in 1..2)
+        val previousAccount = prefs.getString("accountUid", null)
+        require(previousAccount == null || previousAccount == pair.accountUid) {
+            "На этом устройстве уже сохранён ключ другой учётной записи. Нельзя перезаписывать его."
+        }
         val cipher = Cipher.getInstance("AES/GCM/NoPadding")
         cipher.init(Cipher.ENCRYPT_MODE, wrappingKey())
         cipher.updateAAD((pair.accountUid + "|" + pair.pairId).toByteArray(Charsets.UTF_8))
