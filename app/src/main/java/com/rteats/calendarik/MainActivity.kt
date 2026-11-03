@@ -129,6 +129,7 @@ private fun CalendarikScreen() {
             else Authors.SASHA
         )
     }
+    var profileNotSelected by remember { mutableStateOf(!prefs.contains("identity")) }
     var dateText by rememberSaveable { mutableStateOf(LocalDate.now().toString()) }
     val selectedDay = remember(dateText) { LocalDate.parse(dateText) }
     var view by rememberSaveable { mutableStateOf(CalendarView.WEEK) }
@@ -329,6 +330,26 @@ private fun CalendarikScreen() {
                 }
             }
         }
+    }
+
+    if (profileNotSelected) {
+        AlertDialog(
+            onDismissRequest = {},
+            title = { Text("Кто пользуется приложением?") },
+            text = {
+                Text("Выберите локальный профиль для этого устройства. Пока это тестовый выбор, а не защищённое подключение двух телефонов.")
+            },
+            confirmButton = {
+                TextButton(onClick = { changeIdentity(Authors.SASHA); profileNotSelected = false }) {
+                    Text("Я Саша")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { changeIdentity(Authors.NASTYA); profileNotSelected = false }) {
+                    Text("Я Настя")
+                }
+            },
+        )
     }
 
     if (showDatePicker) {
