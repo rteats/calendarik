@@ -7,11 +7,11 @@ plugins {
 
 val buildCode = providers.gradleProperty("VERSION_CODE").orNull?.toIntOrNull() ?: 1
 val buildName = providers.gradleProperty("VERSION_NAME").orNull ?: "0.1.0-dev"
-val store = providers.environmentVariable("CALENDARIK_KEYSTORE_FILE").orNull
-val storePassword = providers.environmentVariable("CALENDARIK_STORE_PASSWORD").orNull
-val alias = providers.environmentVariable("CALENDARIK_KEY_ALIAS").orNull
-val keyPassword = providers.environmentVariable("CALENDARIK_KEY_PASSWORD").orNull
-val signingReady = listOf(store, storePassword, alias, keyPassword).all { !it.isNullOrBlank() }
+val releaseKeystorePath = providers.environmentVariable("CALENDARIK_KEYSTORE_FILE").orNull
+val releaseStorePassword = providers.environmentVariable("CALENDARIK_STORE_PASSWORD").orNull
+val releaseKeyAlias = providers.environmentVariable("CALENDARIK_KEY_ALIAS").orNull
+val releaseKeyPassword = providers.environmentVariable("CALENDARIK_KEY_PASSWORD").orNull
+val signingReady = listOf(releaseKeystorePath, releaseStorePassword, releaseKeyAlias, releaseKeyPassword).all { !it.isNullOrBlank() }
 
 android {
     namespace = "com.rteats.calendarik"
@@ -29,10 +29,10 @@ android {
     signingConfigs {
         if (signingReady) {
             create("rolling") {
-                storeFile = file(store!!)
-                storePassword = storePassword
-                keyAlias = alias
-                keyPassword = keyPassword
+                storeFile = rootProject.file(releaseKeystorePath!!)
+                storePassword = releaseStorePassword
+                keyAlias = releaseKeyAlias
+                keyPassword = releaseKeyPassword
                 storeType = "PKCS12"
             }
         }
