@@ -229,7 +229,7 @@ internal fun CalendarDayView(
     identity: Int,
     onDate: (LocalDate) -> Unit,
     onOpen: (CalendarEvent) -> Unit,
-    onHeart: (HeartColor) -> Unit,
+    onHeart: (HeartColor?) -> Unit,
     onMood: (String?) -> Unit,
 ) {
     val dayEvents = events.filter { eventDay(it) == selectedDay }.sortedBy { it.startsAtMillis }
@@ -430,7 +430,7 @@ internal fun CalendarMonthView(
     identity: Int,
     onDate: (LocalDate) -> Unit,
     onOpen: (CalendarEvent) -> Unit,
-    onHeart: (HeartColor) -> Unit,
+    onHeart: (HeartColor?) -> Unit,
     onMood: (String?) -> Unit,
 ) {
     var showMoods by rememberSaveable { mutableStateOf(false) }
@@ -525,7 +525,7 @@ internal fun CalendarMonthView(
                                             Box(Modifier.size(6.dp).background(eventColor(author), CircleShape))
                                         }
                                     }
-                                    if (entries.any { it.redHearts > 0 || it.pinkHearts > 0 }) {
+                                    if (entries.any { it.heartChoice != 0 }) {
                                         Text(
                                             "♥",
                                             color = Color(0xFFCE60B9),

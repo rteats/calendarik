@@ -13,8 +13,8 @@ class SyncEditRepository(private val db: CalendarDatabase) {
         }
     }
 
-    suspend fun heart(day: Long, author: Int, color: HeartColor) {
-        db.reactions().addHeart(day, author, color)
+    suspend fun heart(day: Long, author: Int, color: HeartColor?) {
+        db.reactions().setHeart(day, author, color)
     }
 
     suspend fun mood(day: Long, author: Int, emoji: String?) {

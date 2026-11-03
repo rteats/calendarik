@@ -184,7 +184,7 @@ internal fun LavenderWeekStrip(
             val selected = date == day
             val hasHeart = reactions.any {
                 it.dateEpochDay == date.toEpochDay() &&
-                    (it.redHearts > 0 || it.pinkHearts > 0)
+                    it.heartChoice != 0
             }
             Column(
                 modifier = Modifier

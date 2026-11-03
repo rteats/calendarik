@@ -46,8 +46,12 @@ class AgendaWidget : GlanceAppWidget() {
                 Spacer(GlanceModifier.height(8.dp))
                 val summaries = listOf(Authors.SASHA, Authors.NASTYA).map { author ->
                     val reaction = reactions.firstOrNull { it.authorId == author }
-                    Authors.label(author) + ": ❤️ " + (reaction?.redHearts ?: 0) +
-                        " 🩷 " + (reaction?.pinkHearts ?: 0) + " " + (reaction?.dayEmoji ?: "")
+                    Authors.label(author) + ": " +
+                        (when (reaction?.heartChoice) {
+                            1 -> "❤️"
+                            2 -> "🩷"
+                            else -> "♡"
+                        }) + " " + (reaction?.dayEmoji ?: "")
                 }
                 summaries.forEach { summary ->
                     Text(summary, style = TextStyle(fontSize = 12.sp))

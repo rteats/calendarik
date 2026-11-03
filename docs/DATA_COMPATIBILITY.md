@@ -33,3 +33,9 @@ version control before introducing further migrations.
 Room schema 3 adds only `dirty_shared_events` and `sync_conflicts`.
 Both are additive and preserve all previous events and daily reactions.
 The v2->v3 migration is registered together with v1->v2.
+
+Room v4 adds `daily_reactions.heartChoice` through explicit `MIGRATION_3_4`.
+Old red/pink counters, emoji, revision, events, tombstones and sync conflict
+records remain untouched. Historical color is chosen by the larger count
+(red for ties); legacy counters are not modified by later choices.
+Android emulator tests verify v1/v2/v3 upgrades to v4.
