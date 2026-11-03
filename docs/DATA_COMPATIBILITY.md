@@ -39,3 +39,11 @@ Old red/pink counters, emoji, revision, events, tombstones and sync conflict
 records remain untouched. Historical color is chosen by the larger count
 (red for ties); legacy counters are not modified by later choices.
 Android emulator tests verify v1/v2/v3 upgrades to v4.
+
+Room v5 adds the separate `shared_hearts` table. Each day has one shared
+heart (0 = cleared, 1 = red, 2 = pink), edited by either person. Existing
+per-user `daily_reactions` keep mood and historical values; the new UI does not
+read their obsolete heartChoice. Encrypted snapshot v3 includes shared hearts
+in both partner snapshots. Lamport revision and author-ID tie-breaking ensures
+deterministic convergence for concurrent offline edits. Both phones must update
+to a version supporting snapshot v3 to continue two-way sync.

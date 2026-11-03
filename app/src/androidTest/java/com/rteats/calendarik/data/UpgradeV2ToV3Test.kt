@@ -50,7 +50,7 @@ class UpgradeV2ToV3Test {
             old.version = 2
         }
         val db = Room.databaseBuilder(context, CalendarDatabase::class.java, name)
-            .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
+            .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
             .build()
         try {
             assertEquals("important", db.events().byId("keep")?.notes)

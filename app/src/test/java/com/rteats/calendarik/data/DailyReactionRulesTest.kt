@@ -10,6 +10,15 @@ class DailyReactionRulesTest {
         assertEquals("👩‍❤️‍👨", DailyReactionRules.sanitizeMood("👩‍❤️‍👨"))
     }
 
+    @Test fun supportsFontAwesomeIds() {
+        assertEquals("fa:poo-storm", DailyReactionRules.sanitizeMood(" fa:poo-storm "))
+        assertEquals("fa:face-grin-squint-tears",
+            DailyReactionRules.sanitizeMood("fa:face-grin-squint-tears"))
+        assertThrows(IllegalArgumentException::class.java) {
+            DailyReactionRules.sanitizeMood("fa:invalid icon")
+        }
+    }
+
     @Test fun emptyMoodClearsTheSlot() {
         assertNull(DailyReactionRules.sanitizeMood("  "))
         assertNull(DailyReactionRules.sanitizeMood(null))

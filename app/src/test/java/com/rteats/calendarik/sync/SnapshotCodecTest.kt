@@ -2,6 +2,7 @@ package com.rteats.calendarik.sync
 
 import com.rteats.calendarik.data.CalendarEvent
 import com.rteats.calendarik.data.DailyReaction
+import com.rteats.calendarik.data.SharedHeart
 import org.junit.Assert.*
 import org.junit.Test
 
@@ -12,18 +13,27 @@ class SnapshotCodecTest {
     @Test fun snapshotRoundTripKeepsAuthorsAndTombstones() {
         val original = CalendarSnapshot(
             listOf(event.copy(deleted = true)),
-            listOf(DailyReaction(42, 2, redHearts = 123, dayEmoji = "😴", revision = 9)),
+            listOf(DailyReaction(42, 2, redHearts = 123, dayEmoji = "fa:poo-storm", revision = 9)),
+            listOf(SharedHeart(42, 2, 12, 1, 999)),
         )
         val restored = SnapshotCodec.decode(SnapshotCodec.encode(original))
         assertEquals(original.events, restored.events)
         assertEquals(original.reactions, restored.reactions)
+        assertEquals(original.sharedHearts, restored.sharedHearts)
     }
 
     @Test fun rejectsUnknownPayloadVersions() {
         val doc = SnapshotCodec.encode(CalendarSnapshot(listOf(event), emptyList()))
         assertThrows(IllegalArgumentException::class.java) {
-            SnapshotCodec.decode(doc.replace("\"version\":2", "\"version\":20"))
+            SnapshotCodec.decode(doc.replace("\"version\":3", "\"version\":20"))
         }
+    }
+
+    @Test fun heartRemovalRoundTripsAsTombstone() {
+        val hearts = listOf(SharedHeart(17, 0, 3, 2, 1245))
+        assertEquals(hearts, SnapshotCodec.decode(
+            SnapshotCodec.encode(CalendarSnapshot(emptyList(), emptyList(), hearts))
+        ).sharedHearts)
     }
 
     @Test fun oldV1ReactionsDecodeToOneHeart() {
@@ -33,6 +43,7 @@ class SnapshotCodecTest {
         assertEquals(3L, migrated.reactions.single().redHearts)
         assertEquals(9L, migrated.reactions.single().pinkHearts)
         assertEquals("💩", migrated.reactions.single().dayEmoji)
+        assertTrue(migrated.sharedHearts.isEmpty())
     }
 
     @Test fun v2SnapshotPreservesChoiceAndLegacyCounts() {
