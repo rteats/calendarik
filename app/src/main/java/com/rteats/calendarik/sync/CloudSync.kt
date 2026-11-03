@@ -185,15 +185,15 @@ class CloudSync(private val context: Context) {
             if (useRemote) {
                 // Accept the remote snapshot verbatim. Both devices can now
                 // converge on the SAME value and clear their dirty markers.
-                database.events().save(incoming)
+                database.events().save(
+                    SharedConflictResolution.choose(local, incoming, true, pair.role, System.currentTimeMillis())
+                )
                 database.sync().clearDirty(eventId)
             } else {
                 // A local choice is a genuinely new revision for the peer.
-                database.events().save(local.copy(
-                    revision = maxOf(local.revision, incoming.revision) + 1L,
-                    lastEditor = pair.role,
-                    updatedAtMillis = System.currentTimeMillis(),
-                ))
+                database.events().save(
+                    SharedConflictResolution.choose(local, incoming, false, pair.role, System.currentTimeMillis())
+                )
                 database.sync().markDirty(com.rteats.calendarik.data.DirtySharedEvent(eventId))
             }
             database.sync().deleteConflict(eventId)
