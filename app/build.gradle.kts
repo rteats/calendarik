@@ -90,8 +90,12 @@ dependencies {
     implementation("androidx.glance:glance-appwidget:1.2.0")
     implementation("androidx.glance:glance-material3:1.2.0")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.2")
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-play-services:1.10.2")
+    implementation("androidx.work:work-runtime-ktx:2.12.0")
+    implementation("com.journeyapps:zxing-android-embedded:4.3.0")
 
     testImplementation("junit:junit:4.13.2")
+    testImplementation("org.json:json:20250517")
     androidTestImplementation("androidx.test.ext:junit:1.2.1")
     androidTestImplementation("androidx.test:runner:1.6.2")
     androidTestImplementation("androidx.room:room-testing:2.8.5")

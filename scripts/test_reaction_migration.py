@@ -42,8 +42,11 @@ class ReactionMigrationTest(unittest.TestCase):
             connection.execute("UPDATE daily_reactions SET redHearts=redHearts+1 WHERE authorId=1")
             self.assertEqual(1, connection.execute("SELECT redHearts FROM daily_reactions").fetchone()[0])
 
-    def test_firebase_cloud_is_locked_until_enrollment(self):
+    def test_firebase_cloud_restricted_to_known_users(self):
         rules = (ROOT / "firestore.rules").read_text()
+        self.assertIn("approvedUsers", rules)
+        self.assertIn("approved()", rules)
+        self.assertIn("request.auth.uid == writerUid", rules)
         self.assertIn("allow read, write: if false", rules)
         self.assertNotIn("allow read, write: if true", rules)
 

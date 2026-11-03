@@ -8,6 +8,9 @@ import kotlinx.coroutines.flow.Flow
 
 @Dao
 interface EventDao {
+    @Query("SELECT * FROM calendar_events ORDER BY id")
+    suspend fun allIncludingDeleted(): List<CalendarEvent>
+
     @Query("SELECT * FROM calendar_events WHERE deleted = 0 AND startsAtMillis < :end AND endsAtMillis > :start ORDER BY startsAtMillis, id")
     fun observeRange(start: Long, end: Long): Flow<List<CalendarEvent>>
 

@@ -8,8 +8,9 @@ import re
 assert not re.search(r"(?m)^\s*\.?fallbackToDestructiveMigration\s*\(", db), "Destructive migrations are prohibited"
 assert 'exportSchema = true' in db, "Room schema export is mandatory"
 assert "room.schemaLocation" in gradle, "Room schema snapshots must be exported"
-assert "version = 2" in db, "Expected explicit Room v2 schema"
-assert "addMigrations(MIGRATION_1_2)" in db, "Missing v1 to v2 migration registration"
-assert (project / "app/src/main/java/com/rteats/calendarik/data/Migrations.kt").exists(), "Migration source missing"
+assert "version = 3" in db, "Expected explicit Room v3 schema"
+assert "addMigrations(MIGRATION_1_2, MIGRATION_2_3)" in db, "Missing explicit v1->2->3 migration chain"
+assert (project / "app/src/main/java/com/rteats/calendarik/data/Migrations.kt").exists(), "v1->v2 migration missing"
+assert (project / "app/src/main/java/com/rteats/calendarik/data/Migration3.kt").exists(), "v2->v3 migration missing"
 assert 'applicationId = "com.rteats.calendarik"' in gradle, "Changing package ID breaks in-place updates"
 print("Migration and package identity policy OK")

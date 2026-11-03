@@ -1,47 +1,65 @@
-# Firebase setup for calendarik-bff31
+# Настройка Firebase для Calendarik
 
-The attached Android client config has been integrated into
-\`app/google-services.json\` and Google Services plugin 4.5.0 is applied.
+Проект: `calendarik-bff31`.
 
-The Firebase Android client config contains public project identifiers and
-an API key, **not a service account private key or an encryption key**.
-Firebase explicitly permits committing Firebase-only client keys when
-API restrictions and Security Rules are configured.
+## Обязательные действия владельца проекта
 
-## Project owner actions
+1. Убедитесь, что проект на тарифе **Spark**, Cloud Firestore создан, и
+   в Firebase Authentication включён провайдер **Email/Password**.
+2. После установки новой версии на **двух телефонах** откройте
+   «Связь» → «Создать аккаунт». Используйте разные email и пароли.
+3. На каждом телефоне нажмите **«Скопировать мой Firebase UID»**.
+   В Firebase Console → Firestore Database → Data создайте коллекцию
+   `approvedUsers`. Добавьте два документа: ID каждого документа =
+   Firebase UID соответствующего пользователя. В каждом документе
+   добавьте поле `enabled` типа Boolean со значением `true`.
+   **Не публикуйте UID в чате или публичном репозитории.**
+4. Firestore Database → Rules: вставьте актуальные правила из
+   [firestore.rules](../firestore.rules) и нажмите **Publish**.
+   Если оставить прежние `deny-all` правила, приложение будет работать
+   только локально, но создание пары завершится ошибкой разрешений.
+5. На первом телефоне откройте «Связь», выберите Сашу или Настю и
+   нажмите «Создать пару». На экране появится QR-код с ключом.
+6. На втором телефоне откройте «Связь» → «Сканировать QR» и
+   отправьте запрос. На первом устройстве нажмите
+   «Проверить запросы на подключение», проверьте email и
+   нажмите «Подтвердить этого пользователя».
+7. На втором телефоне нажмите «Проверить подключение».
+   После подключения календарь и реакции начнут синхронизироваться
+   между Wi-Fi и мобильными сетями.
+8. На обоих телефонах создайте события и реакции и проверьте, что
+   содержимое синхронизируется. Проверьте изменения в офлайн-режиме
+   и восстановление сети.
 
-1. [Open Firebase](https://console.firebase.google.com/project/calendarik-bff31/overview).
-2. Verify project uses **Spark**, not Blaze, if zero billing is required.
-3. In **Build > Firestore Database**, create a Firestore database with
-   **production mode** security rules, not test mode.
-4. In **Authentication > Sign-in method**, enable only the provider we will
-   use for two verified identities. We have not enabled any provider from code.
-5. In **Firestore > Rules**, paste \`firestore.rules\` (deny all) and publish.
-   This is safe now, but blocks sync until authenticated two-user enrollment
-   and E2EE are implemented.
-6. Inspect the project's Google API key in Google Cloud Console and confirm
-   it is restricted to Firebase services. Never add unrestricted APIs.
-7. Keep all Admin SDK/service-account private keys outside this repository.
+## Безопасность
 
-Alternatively, the owner can deploy \`firestore.rules\` using the Firebase CLI:
-\`firebase login\` then \`firebase deploy --only firestore:rules\`.
-This action needs an account with project access; a repository commit cannot
-configure remote Firestore security rules.
+- **Никаких plaintext-событий в Firestore.** На сервер отправляются только
+  AES-256-GCM ciphertext, nonce, schema, writer UID и служебное время.
+- Ключ генерируется на телефоне, передаётся QR-кодом напрямую другому
+  телефону и хранится под защитой Android Keystore.
+- Все операции Firestore разрешены только двум UID из
+  `approvedUsers` при наличии проверенного членства в паре.
+- Создатель пары вручную подтверждает второго пользователя.
+- Пароль Firebase хранится только в Firebase Authentication SDK,
+  а не в коде или GitHub.
+- Не публикуйте QR-код. Любой, кто получил его изображение,
+  получил и ключ расшифровки. Допуск к базе дополнительно
+  защищён Firebase Authentication + Security Rules.
+- Настройка из репозитория **не устанавливает правила на сервер сама**:
+  требуется вручную нажать Publish.
+- Автоматическое резервное копирование выключено. **Не удаляйте приложение
+  и не сбрасывайте оба устройства**, если хотите сохранить возможность
+  расшифровать облачные данные. Восстановление ключей пока не реализовано.
+- При несовместимом редактировании одного общего события сохранится
+  конфликт. Его нужно разрешить в приложении.
 
-## Current status
+## Ограничения первой версии синхронизации
 
-- Firebase Android SDKs, BoM and Google Services plugin are configured.
-- The application runs fully offline, including events, hearts and moods.
-- **Cloud writes, identity enrollment and cross-device sync are not enabled.**
-  The app does not send plaintext events or reactions to Firestore.
-- \`firestore.rules\` denies all until the real end-to-end encrypted
-  protocol and pair-specific access control are tested.
-- For now, the in-app Sasha/Nastya selector is local UI only and not secure
-  identity verification.
-
-Do not weaken Security Rules to \`allow read, write: if true\`. Never store
-plain event titles, descriptions, dates, moods or counters in Firestore
-until encryption and authorization are implemented and verified.
-
-Read: https://firebase.google.com/docs/projects/api-keys
-
+- Для ровно двух аккаунтов и одного телефона на человека.
+- Один зашифрованный снимок на участника; лимит примерно 600 КБ
+  незашифрованных данных на участника. При превышении синхронизация
+  выдаёт ошибку, но не удаляет локальные события.
+- Обновления в активном приложении быстрые благодаря Firestore listener,
+  фоновое резервное обновление — WorkManager (не точный интервал).
+- Фотографии и файлы во вложениях пока не поддерживаются.
+- При потере обоих ключей серверные данные нельзя расшифровать.
