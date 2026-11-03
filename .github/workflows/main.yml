@@ -58,6 +58,12 @@ jobs:
           name: calendarik-ephemeral-preview-do-not-keep-data
           path: app/build/outputs/apk/debug/app-debug.apk
           retention-days: 7
+      - name: Validate keystore before release build
+        if: steps.signing.outputs.enabled == 'true'
+        run: |
+          test -s "$CALENDARIK_KEYSTORE_FILE"
+          keytool -list -keystore "$CALENDARIK_KEYSTORE_FILE" \
+            -storetype PKCS12 -storepass "$CALENDARIK_STORE_PASSWORD" >/dev/null
       - name: Build consistently signed release
         if: steps.signing.outputs.enabled == 'true'
         run: |
