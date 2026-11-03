@@ -21,6 +21,25 @@ switch remains for offline/demo use only; a paired account has a locked role.
   \`latest\` GitHub Release for in-app updates; without them, a disposable debug
   artifact is published in Actions **but is not safe to keep data in**.
 
+## Release APK size
+
+The signed APK built by `main` uses **R8 code shrinking and optimization**
+and Android **resource shrinking** (the same production approach as MPEI Lite).
+Normal debug builds are not shrunk. To reproduce the optimized release locally,
+run `gradle :app:assembleRelease -POPTIMIZE_RELEASE=true`; a local build
+without the required signing secrets is not a replacement for the published
+APK.
+
+The GitHub Actions build summary compares the new APK size with the previous
+`latest` release asset. PR checks also run the R8 shrinking task **without
+packaging an APK**, in addition to lint and unit tests. Do not add broad
+`-keep` rules or disable the shrinkers to silence R8 failures: narrow
+preservation rules must cover only code accessed by reflection.
+
+Do not change the application ID, release signing key, or Room migrations
+as a size optimization. ABI splits are intentionally not used because
+in-app updates currently download **one universal APK**.
+
 ## Signing before your first real installation
 
 **Never commit an APK signing private key.** Generate a stable PKCS#12 file on

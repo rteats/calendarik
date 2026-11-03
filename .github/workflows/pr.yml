@@ -29,6 +29,8 @@ jobs:
           cache-read-only: true
       - name: Lint and JVM tests (no APK)
         run: gradle --no-daemon lintDebug testDebugUnitTest
+      - name: Verify production R8 shrinking without packaging an APK
+        run: gradle --no-daemon :app:minifyReleaseWithR8 -POPTIMIZE_RELEASE=true
       - name: Build reports on failure
         if: failure()
         uses: actions/upload-artifact@v4
