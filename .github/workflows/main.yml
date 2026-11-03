@@ -30,6 +30,7 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '9.6.0'
+          cache-cleanup: on-success
       - name: Set rolling version using Moscow date
         env:
           GH_TOKEN: ${{ github.token }}
@@ -165,3 +166,11 @@ jobs:
             Calendarik.apk
             update.json
 
+      - name: Save build failure reports
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: main-build-failure-reports
+          path: app/build/reports/
+          retention-days: 7
+          if-no-files-found: ignore
