@@ -38,29 +38,16 @@ jobs:
           PREVIOUS="$(gh api "repos/$GITHUB_REPOSITORY/releases/tags/latest" --jq '.name' 2>/dev/null || true)"
           echo "VERSION_NAME=$(python3 scripts/moscow_version.py "$PREVIOUS")" >> "$GITHUB_ENV"
           echo "VERSION_CODE=$((1000000 + GITHUB_RUN_NUMBER))" >> "$GITHUB_ENV"
-      - name: Detect private signing configuration
-        id: signing
+      - name: Require stable signing configuration
         run: |
-          if [ -n "$KEYSTORE_B64" ] && [ -n "$CALENDARIK_STORE_PASSWORD" ] && [ -n "$CALENDARIK_KEY_ALIAS" ] && [ -n "$CALENDARIK_KEY_PASSWORD" ]; then
-            echo "$KEYSTORE_B64" | base64 --decode > "$RUNNER_TEMP/calendarik-release.p12"
-            echo "CALENDARIK_KEYSTORE_FILE=$RUNNER_TEMP/calendarik-release.p12" >> "$GITHUB_ENV"
-            echo "enabled=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "No release key configured. A debug APK will be built; it uses an ephemeral signing identity and MUST NOT be used for permanent data."
-            echo "enabled=false" >> "$GITHUB_OUTPUT"
-          fi
-      - name: Build preview APK without signing secrets
-        if: steps.signing.outputs.enabled != 'true'
-        run: gradle --no-daemon assembleDebug -PVERSION_CODE="$VERSION_CODE" -PVERSION_NAME="$VERSION_NAME"
-      - name: Upload non-updatable preview APK
-        if: steps.signing.outputs.enabled != 'true'
-        uses: actions/upload-artifact@v4
-        with:
-          name: calendarik-ephemeral-preview-do-not-keep-data
-          path: app/build/outputs/apk/debug/app-debug.apk
-          retention-days: 7
+          test -n "$KEYSTORE_B64" && test -n "$CALENDARIK_STORE_PASSWORD" && test -n "$CALENDARIK_KEY_ALIAS" && test -n "$CALENDARIK_KEY_PASSWORD" || { echo "Release signing secrets are required" >&2; exit 1; }
+          echo "$KEYSTORE_B64" | base64 --decode > "$RUNNER_TEMP/calendarik-release.p12"
+          echo "CALENDARIK_KEYSTORE_FILE=$RUNNER_TEMP/calendarik-release.p12" >> "$GITHUB_ENV"
+      - name: Verify migration and release policies
+        run: |
+          python3 scripts/check_migration_policy.py
+          python3 -m unittest discover -s scripts -p 'test_*.py' -v
       - name: Validate keystore before release build
-        if: steps.signing.outputs.enabled == 'true'
         run: |
           test -s "$CALENDARIK_KEYSTORE_FILE"
           # Confirm the store can be read. Never print the private key or passwords.
@@ -86,7 +73,6 @@ jobs:
             echo "CALENDARIK_KEY_ALIAS=${PRIVATE_ALIASES[0]}" >> "$GITHUB_ENV"
           fi
       - name: Verify actual private-key password before release build
-        if: steps.signing.outputs.enabled == 'true'
         run: |
           if java scripts/VerifySigningKey.java "$CALENDARIK_KEYSTORE_FILE" "$CALENDARIK_KEY_ALIAS" >/dev/null 2>&1; then
             echo "Private-key password verified."
@@ -100,18 +86,23 @@ jobs:
             echo "Correct GitHub Actions secret CALENDARIK_KEY_PASSWORD; do not publish passwords." >&2
             exit 1
           fi
+      - name: Lint and JVM tests
+        run: bash gradlew --no-daemon lintDebug testDebugUnitTest
       - name: Build consistently signed release
-        if: steps.signing.outputs.enabled == 'true'
         run: |
-          gradle --no-daemon assembleRelease \
+          bash gradlew --no-daemon assembleRelease \
             -POPTIMIZE_RELEASE=true \
             -PVERSION_CODE="$VERSION_CODE" \
             -PVERSION_NAME="$VERSION_NAME"
           cp app/build/outputs/apk/release/app-release.apk Calendarik.apk
-          SHA256="$(sha256sum Calendarik.apk | cut -d ' ' -f1)"
-          printf '{"versionCode":%s,"versionName":"%s","sha256":"%s"}\n' "$VERSION_CODE" "$VERSION_NAME" "$SHA256" > update.json
+          "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --print-certs Calendarik.apk | grep -F "$(sed -n 's/^SIGNING_CERTIFICATE_SHA256=//p' build-identity.properties)"
+      - name: Verify publication order and prepare pinned update manifest
+        run: |
+          test "$(git ls-remote origin refs/heads/main | cut -f1)" = "$GITHUB_SHA" || { echo "A newer main commit exists; publish that build instead" >&2; exit 1; }
+          curl --fail --location --retry 3 https://github.com/rteats/calendarik/releases/download/latest/update.json -o previous-update.json
+          python3 scripts/release_manifest.py "$VERSION_CODE" "$VERSION_NAME" "$GITHUB_SHA"
+          echo "RELEASE_TAG=$(python3 -c 'import json; print(json.load(open("update.json"))["apkUrl"].split("/")[-2])')" >> "$GITHUB_ENV"
       - name: Report APK size compared with previous release
-        if: steps.signing.outputs.enabled == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
         shell: bash
@@ -135,21 +126,29 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
           echo "APK bytes: $CURRENT_BYTES"
       - name: Upload signed release artifact
-        if: steps.signing.outputs.enabled == 'true'
         uses: actions/upload-artifact@v4
         with:
           name: calendarik-signed-apk
           path: |
             Calendarik.apk
             update.json
+            app/schemas/
           retention-days: 14
+      - name: Publish permanent APK for this build
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ env.RELEASE_TAG }}
+          target_commitish: ${{ github.sha }}
+          name: Calendarik ${{ env.VERSION_NAME }} (build ${{ env.VERSION_CODE }})
+          make_latest: false
+          files: |
+            Calendarik.apk
+            update.json
       - name: Point latest tag at this commit
-        if: steps.signing.outputs.enabled == 'true'
         run: |
           git tag -f latest "$GITHUB_SHA"
           git push origin refs/tags/latest --force
       - name: Publish rolling release
-        if: steps.signing.outputs.enabled == 'true'
         uses: softprops/action-gh-release@v2
         with:
           tag_name: latest

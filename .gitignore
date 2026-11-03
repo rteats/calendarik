@@ -4,6 +4,7 @@ build/
 .idea/
 *.iml
 local.properties
+signing.properties
 *.jks
 *.keystore
 *.p12
@@ -14,3 +15,4 @@ local.properties
 
 
 node_modules/
+__pycache__/

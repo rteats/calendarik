@@ -15,11 +15,17 @@ switch remains for offline/demo use only; a paired account has a locked role.
 
 - Java 17, Gradle 9.6, Android SDK 36
 - Firebase SDK dependencies and public Android client configuration included
-- Run: \`gradle :app:assembleDebug\` (debug package is \`com.rteats.calendarik.debug\`)
+- Run: \`gradle :app:assembleDebug\` (debug package is \`com.rteats.calendarik\`)
 - Pull requests: Python policy checks, Android lint and JVM tests; no APK build
-- Main: APK build only. With signing secrets, main publishes a single rolling
-  \`latest\` GitHub Release for in-app updates; without them, a disposable debug
-  artifact is published in Actions **but is not safe to keep data in**.
+- Main: lint, tests and optimized APK. With signing secrets, main publishes a rolling
+  `latest` GitHub Release for in-app updates; missing signing secrets fail the build.
+
+## Android Studio and published releases
+
+See [the development and release workflow](docs/DEVELOPMENT.md). Both paths use
+`com.rteats.calendarik` and the same pinned signing certificate. Android Studio
+reads the ignored `signing.properties` and automatically reuses the connected
+phone's version code. No manual `VERSION_CODE` edits are needed.
 
 ## Release APK size
 

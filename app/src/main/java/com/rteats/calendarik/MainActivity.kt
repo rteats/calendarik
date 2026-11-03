@@ -134,9 +134,30 @@ class MainActivity : ComponentActivity() {
             // This illustration-led surface uses a consistent light pastel palette.
             // Dark system colors would make labels unreadable on the translucent cards.
             MaterialTheme(colorScheme = light) {
-                LavenderBackdrop { CalendarikScreen(widgetDay, widgetEventId, widgetCreate) }
+                LavenderBackdrop { DatabaseGate { CalendarikScreen(widgetDay, widgetEventId, widgetCreate) } }
             }
         }
+    }
+}
+
+@Composable
+private fun DatabaseGate(content: @Composable () -> Unit) {
+    val context = LocalContext.current
+    var ready by remember { mutableStateOf(false) }
+    var failed by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) {
+        try {
+            withContext(Dispatchers.IO) { CalendarDatabase.get(context).openHelper.writableDatabase }
+            ready = true
+        } catch (failure: Exception) {
+            NetworkDiagnostics.get(context).log("database", "open", "error", failure = failure)
+            failed = true
+        }
+    }
+    when {
+        ready -> content()
+        failed -> Text("Не удалось открыть базу данных. Данные сохранены. Установите актуальную версию приложения; не удаляйте приложение и не очищайте его данные.", modifier = Modifier.padding(24.dp))
+        else -> Text("Открываю календарь…", modifier = Modifier.padding(24.dp))
     }
 }
 
@@ -364,7 +385,7 @@ private fun CalendarikScreen(widgetDay: String?, widgetEventId: String?, widgetC
         scope.launch {
             runCatching { GithubUpdater.check(context) }
                 .onSuccess { latest ->
-                    if (latest.versionCode > BuildConfig.VERSION_CODE) {
+                    if (GithubUpdater.canInstall(latest)) {
                         updateAvailable = latest
                         updateText = "Доступна версия " + latest.versionName
                     } else {

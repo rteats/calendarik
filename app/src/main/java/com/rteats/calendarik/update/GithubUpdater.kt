@@ -24,9 +24,17 @@ private const val APK_URL =
     "https://github.com/rteats/calendarik/releases/download/latest/Calendarik.apk"
 private const val MAX_APK_BYTES = 150L * 1024 * 1024
 
-data class UpdateManifest(val versionCode: Int, val versionName: String, val sha256: String)
+data class UpdateManifest(
+    val versionCode: Int, val versionName: String, val sha256: String,
+    val databaseVersion: Int = 5, val apkUrl: String = APK_URL,
+)
 
 object GithubUpdater {
+    fun canInstall(release: UpdateManifest): Boolean =
+        release.databaseVersion >= BuildConfig.DATABASE_VERSION &&
+            (release.versionCode > BuildConfig.VERSION_CODE ||
+                (BuildConfig.DEBUG && release.versionCode == BuildConfig.VERSION_CODE))
+
     private suspend fun <T> traced(
         context: Context,
         name: String,
@@ -72,19 +80,23 @@ object GithubUpdater {
         require(code > 0)
         require(Regex("""\d{4}\.\d{2}\.\d{2}\.\d+""").matches(name))
         require(Regex("[a-f0-9]{64}").matches(sha))
-        return UpdateManifest(code, name, sha)
+        val databaseVersion = json.optInt("databaseVersion", 5)
+        val apkUrl = json.optString("apkUrl", APK_URL)
+        require(databaseVersion > 0)
+        require(apkUrl == APK_URL || Regex("https://github\\.com/rteats/calendarik/releases/download/build-[0-9]+-[a-f0-9]{12}/Calendarik\\.apk").matches(apkUrl))
+        return UpdateManifest(code, name, sha, databaseVersion, apkUrl)
     }
 
     suspend fun downloadAndCheck(context: Context, release: UpdateManifest): File =
         traced(context, "update_download_verify") {
             withContext(Dispatchers.IO) {
-            require(release.versionCode > BuildConfig.VERSION_CODE) { "Это не новая версия" }
+            require(canInstall(release)) { "Версия несовместима с текущей базой данных или старее установленной" }
             val folder = File(context.cacheDir, "updates")
             check(folder.exists() || folder.mkdirs()) { "Не удалось создать каталог загрузок" }
             val part = File(folder, "Calendarik.apk.part")
             val dest = File(folder, "Calendarik.apk")
             part.delete()
-            val request = URL(APK_URL).openConnection() as HttpURLConnection
+            val request = URL(release.apkUrl).openConnection() as HttpURLConnection
             request.connectTimeout = 15_000
             request.readTimeout = 60_000
             try {
