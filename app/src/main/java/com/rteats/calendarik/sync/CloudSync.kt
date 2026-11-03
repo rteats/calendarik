@@ -20,6 +20,7 @@ import com.google.firebase.firestore.Source
 import com.rteats.calendarik.data.Authors
 import com.rteats.calendarik.data.CalendarDatabase
 import com.rteats.calendarik.data.CalendarEvent
+import com.rteats.calendarik.data.SharedHeartRules
 import com.rteats.calendarik.data.SyncConflict
 import com.rteats.calendarik.widget.refreshWidgets
 import java.security.MessageDigest
@@ -110,7 +111,7 @@ class CloudSync(private val context: Context) {
             Authors.hasPermission(it.authorMask, pair.role)
         }
         val reactions = database.reactions().allByAuthor(pair.role)
-        return SnapshotCodec.encode(CalendarSnapshot(events, reactions))
+        return SnapshotCodec.encode(CalendarSnapshot(events, reactions, database.sharedHearts().all()))
     }
 
     private suspend fun pushIfChanged(pair: LocalPair, documentPath: String) {
@@ -191,6 +192,15 @@ class CloudSync(private val context: Context) {
                 val current = database.reactions().get(incoming.dateEpochDay, incoming.authorId)
                 if (current == null || incoming.revision > current.revision) {
                     database.reactions().upsert(incoming)
+                    applied++
+                }
+            }
+            // Both devices publish and edit the same logical heart per day.
+            // Lamport revision and author tie-break prevent divergent snapshots.
+            remote.sharedHearts.forEach { incoming ->
+                val current = database.sharedHearts().get(incoming.dateEpochDay)
+                if (SharedHeartRules.shouldAccept(current, incoming)) {
+                    database.sharedHearts().upsert(incoming)
                     applied++
                 }
             }
