@@ -64,6 +64,9 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.material.icons.filled.Menu
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -106,14 +109,14 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         setContent {
             val light = lightColorScheme(
-                primary = lavender,
+                primary = LavenderUi.violet,
                 onPrimary = Color.White,
                 primaryContainer = Color(0xFFE9DFFF),
                 onPrimaryContainer = Color(0xFF2F175F),
-                background = violetBackground,
+                background = Color(0xFFE5E2FC),
                 onBackground = Color(0xFF292345),
                 surface = Color(0xFFFFFBFF),
-                onSurface = Color(0xFF292345),
+                onSurface = LavenderUi.ink,
                 surfaceVariant = Color(0xFFEEE8FC),
                 secondaryContainer = Color(0xFFE7E5FF),
             )
@@ -124,8 +127,10 @@ class MainActivity : ComponentActivity() {
                 surface = Color(0xFF242031),
                 surfaceVariant = Color(0xFF383146),
             )
-            MaterialTheme(colorScheme = if (androidx.compose.foundation.isSystemInDarkTheme()) dark else light) {
-                Surface(modifier = Modifier.fillMaxSize()) { CalendarikScreen() }
+            // This illustration-led surface uses a consistent light pastel palette.
+            // Dark system colors would make labels unreadable on the translucent cards.
+            MaterialTheme(colorScheme = light) {
+                LavenderBackdrop { CalendarikScreen() }
             }
         }
     }
@@ -284,7 +289,7 @@ private fun CalendarikScreen() {
 
     var dateText by rememberSaveable { mutableStateOf(LocalDate.now().toString()) }
     val selectedDay = remember(dateText) { LocalDate.parse(dateText) }
-    var view by rememberSaveable { mutableStateOf(CalendarView.WEEK) }
+    var view by rememberSaveable { mutableStateOf(CalendarView.MONTH) }
     var filter by rememberSaveable { mutableIntStateOf(0) }
     var searchOpen by rememberSaveable { mutableStateOf(false) }
     var searchQuery by rememberSaveable { mutableStateOf("") }
@@ -306,7 +311,19 @@ private fun CalendarikScreen() {
     val window = remember(selectedDay, view) { dateWindow(selectedDay, view) }
     val eventsFlow = remember(window) { db.events().observeRange(window.startMillis, window.endMillis) }
     val events by eventsFlow.collectAsState(initial = emptyList())
-    val reactionsFlow = remember(window) { db.reactions().observeBetween(window.start.toEpochDay(), window.endExclusive.toEpochDay()) }
+    // The day strip displays hearts for all seven visible dates, not only the selected day.
+    val reactionWindow = remember(window, selectedDay, view) {
+        if (view == CalendarView.DAY) {
+            val monday = selectedDay.minusDays((selectedDay.dayOfWeek.value - 1).toLong())
+            DateWindow(monday, monday.plusDays(7))
+        } else window
+    }
+    val reactionsFlow = remember(reactionWindow) {
+        db.reactions().observeBetween(
+            reactionWindow.start.toEpochDay(),
+            reactionWindow.endExclusive.toEpochDay(),
+        )
+    }
     val reactions by reactionsFlow.collectAsState(initial = emptyList())
     val searchFlow = remember(searchOpen, searchQuery) {
         if (searchOpen && searchQuery.isNotBlank()) db.events().observeSearch(searchQuery.trim())
@@ -360,33 +377,44 @@ private fun CalendarikScreen() {
     }
 
     Scaffold(
+        containerColor = Color.Transparent,
         topBar = {
             TopAppBar(
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = Color.Transparent,
+                    titleContentColor = Color.White,
+                    navigationIconContentColor = Color.White,
+                    actionIconContentColor = Color.White,
+                ),
+                navigationIcon = {
+                    IconButton(onClick = { settingsOpen = true }) {
+                        Icon(Icons.Default.Menu, contentDescription = "Настройки и профиль")
+                    }
+                },
                 title = {
                     Column {
-                        Text("Календарик", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                        Text(view.label, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
                         Text(
-                            when {
-                                paired?.active == true -> "Саша и Настя · синхронизация"
-                                paired != null -> "Ожидается подключение пары"
-                                accountUid != null -> "Аккаунт подключён · без пары"
-                                else -> "Саша и Настя · локально"
-                            },
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            dateTitle(selectedDay, view),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = Color.White.copy(alpha = .93f),
+                            maxLines = 1,
                         )
                     }
                 },
                 actions = {
                     IconButton(onClick = { searchOpen = !searchOpen; if (!searchOpen) searchQuery = "" }) {
-                        Icon(if (searchOpen) Icons.Default.Close else Icons.Default.Search, contentDescription = if (searchOpen) "Закрыть поиск" else "Поиск")
+                        Icon(
+                            if (searchOpen) Icons.Default.Close else Icons.Default.Search,
+                            contentDescription = if (searchOpen) "Закрыть поиск" else "Поиск",
+                        )
                     }
                     IconButton(onClick = { showDatePicker = true }) {
                         Icon(Icons.Default.DateRange, contentDescription = "Выбрать дату")
                     }
                     Box {
                         IconButton(onClick = { moreMenu = true }) {
-                            Icon(Icons.Default.MoreVert, contentDescription = "Ещё")
+                            Icon(Icons.Default.MoreVert, contentDescription = "Дополнительно")
                         }
                         DropdownMenu(expanded = moreMenu, onDismissRequest = { moreMenu = false }) {
                             DropdownMenuItem(
@@ -398,7 +426,7 @@ private fun CalendarikScreen() {
                                 onClick = { moreMenu = false; pairingOpen = true },
                             )
                             DropdownMenuItem(
-                                text = { Text("Саша и Настя · настройки") },
+                                text = { Text("Настройки") },
                                 onClick = { moreMenu = false; settingsOpen = true },
                                 leadingIcon = { Icon(Icons.Default.Settings, contentDescription = null) },
                             )
@@ -407,93 +435,127 @@ private fun CalendarikScreen() {
                 },
             )
         },
+        bottomBar = {
+            if (!searchOpen) {
+                LavenderBottomNavigation(view = view, onChange = { view = it })
+            }
+        },
         floatingActionButton = {
             if (!searchOpen) {
-                FloatingActionButton(onClick = ::addEvent) {
+                FloatingActionButton(
+                    onClick = ::addEvent,
+                    containerColor = LavenderUi.violet,
+                    contentColor = Color.White,
+                    shape = CircleShape,
+                ) {
                     Icon(Icons.Default.Add, contentDescription = "Создать событие")
                 }
             }
         },
     ) { insets ->
         Column(modifier = Modifier.fillMaxSize().padding(insets)) {
-            if (searchOpen) {
-                OutlinedTextField(
-                    value = searchQuery,
-                    onValueChange = { searchQuery = it },
-                    label = { Text("Поиск по событиям") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
-                )
-                SearchResults(
-                    events = searchEvents.filter { matchesFilter(it, filter) },
-                    query = searchQuery,
-                    onOpen = ::showEvent,
-                )
-            } else {
-                Row(
-                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                ) {
-                    Box {
-                        TextButton(onClick = { modeMenu = true }) {
-                            Text(view.label, style = MaterialTheme.typography.titleMedium)
-                            Text("  ▾", style = MaterialTheme.typography.titleMedium)
+            LavenderPanel(
+                modifier = Modifier.fillMaxSize().padding(horizontal = 10.dp, vertical = 3.dp),
+            ) {
+                Column(modifier = Modifier.fillMaxSize().padding(top = 7.dp)) {
+                    if (searchOpen) {
+                        OutlinedTextField(
+                            value = searchQuery,
+                            onValueChange = { searchQuery = it },
+                            label = { Text("Поиск по событиям") },
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+                        )
+                        SearchResults(
+                            events = searchEvents.filter { matchesFilter(it, filter) },
+                            query = searchQuery,
+                            onOpen = ::showEvent,
+                        )
+                    } else {
+                        Row(
+                            modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                        ) {
+                            Text(
+                                when (view) {
+                                    CalendarView.DAY -> "План на день"
+                                    CalendarView.WEEK -> "Наша неделя"
+                                    CalendarView.MONTH -> "Наш календарь"
+                                    CalendarView.AGENDA -> "Лента событий"
+                                },
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = LavenderUi.ink,
+                                modifier = Modifier.weight(1f),
+                                maxLines = 1,
+                            )
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                TextButton(onClick = {
+                                    selectDate(when (view) {
+                                        CalendarView.MONTH -> selectedDay.minusMonths(1)
+                                        CalendarView.WEEK -> selectedDay.minusWeeks(1)
+                                        CalendarView.DAY -> selectedDay.minusDays(1)
+                                        CalendarView.AGENDA -> selectedDay.minusDays(7)
+                                    })
+                                }) { Text("‹", style = MaterialTheme.typography.headlineSmall) }
+                                TextButton(onClick = { showDatePicker = true }) {
+                                    Text(
+                                        selectedDay.dayOfMonth.toString() + " " +
+                                            selectedDay.month.getDisplayName(
+                                                java.time.format.TextStyle.SHORT_STANDALONE,
+                                                Locale.forLanguageTag("ru-RU"),
+                                            ),
+                                        style = MaterialTheme.typography.labelLarge,
+                                    )
+                                }
+                                TextButton(onClick = {
+                                    selectDate(when (view) {
+                                        CalendarView.MONTH -> selectedDay.plusMonths(1)
+                                        CalendarView.WEEK -> selectedDay.plusWeeks(1)
+                                        CalendarView.DAY -> selectedDay.plusDays(1)
+                                        CalendarView.AGENDA -> selectedDay.plusDays(7)
+                                    })
+                                }) { Text("›", style = MaterialTheme.typography.headlineSmall) }
+                            }
                         }
-                        DropdownMenu(expanded = modeMenu, onDismissRequest = { modeMenu = false }) {
-                            CalendarView.entries.forEach { item ->
-                                DropdownMenuItem(
-                                    text = { Text(item.label) },
-                                    onClick = { view = item; modeMenu = false },
-                                    trailingIcon = {
-                                        if (view == item) Text("✓", color = MaterialTheme.colorScheme.primary)
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .horizontalScroll(rememberScrollState())
+                                .padding(horizontal = 12.dp, vertical = 2.dp),
+                            horizontalArrangement = Arrangement.spacedBy(7.dp),
+                        ) {
+                            listOf("Все", "Саша", "Настя", "Общие").forEachIndexed { index, title ->
+                                FilterChip(
+                                    selected = filter == index,
+                                    onClick = { filter = index },
+                                    label = { Text(title) },
+                                    leadingIcon = if (index == 0) null else {
+                                        { Box(Modifier.width(9.dp).height(9.dp).background(authorColor(index), CircleShape)) }
                                     },
                                 )
                             }
                         }
-                    }
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        TextButton(onClick = { selectDate(when (view) { CalendarView.MONTH -> selectedDay.minusMonths(1); CalendarView.WEEK -> selectedDay.minusWeeks(1); else -> selectedDay.minusDays(1) }) }) {
-                            Text("‹", style = MaterialTheme.typography.headlineSmall)
+                        HorizontalDivider(color = LavenderUi.line.copy(alpha = .5f))
+                        Box(modifier = Modifier.fillMaxSize().padding(horizontal = 5.dp)) {
+                            when (view) {
+                                CalendarView.DAY -> CalendarDayView(
+                                    selectedDay, visibleEvents, reactions, activeIdentity,
+                                    ::selectDate, ::showEvent, ::addHeart, ::setMood,
+                                )
+                                CalendarView.WEEK -> CalendarWeekView(
+                                    selectedDay, visibleEvents, ::selectDate, ::showEvent,
+                                )
+                                CalendarView.MONTH -> CalendarMonthView(
+                                    selectedDay, visibleEvents, reactions, activeIdentity,
+                                    ::selectDate, ::showEvent, ::addHeart, ::setMood,
+                                )
+                                CalendarView.AGENDA -> CalendarAgendaView(
+                                    selectedDay, visibleEvents, ::selectDate, ::showEvent,
+                                )
+                            }
                         }
-                        TextButton(onClick = { showDatePicker = true }) {
-                            Text(dateTitle(selectedDay, view), style = MaterialTheme.typography.labelLarge)
-                        }
-                        TextButton(onClick = { selectDate(when (view) { CalendarView.MONTH -> selectedDay.plusMonths(1); CalendarView.WEEK -> selectedDay.plusWeeks(1); else -> selectedDay.plusDays(1) }) }) {
-                            Text("›", style = MaterialTheme.typography.headlineSmall)
-                        }
-                    }
-                }
-                Row(
-                    modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 16.dp),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    listOf("Все", "Саша", "Настя", "Общие").forEachIndexed { index, title ->
-                        FilterChip(
-                            selected = filter == index,
-                            onClick = { filter = index },
-                            label = { Text(title) },
-                            leadingIcon = if (index == 0) null else {
-                                { Box(Modifier.width(9.dp).height(9.dp).background(authorColor(index), androidx.compose.foundation.shape.CircleShape)) }
-                            },
-                        )
-                    }
-                }
-                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
-                Box(modifier = Modifier.fillMaxSize()) {
-                    when (view) {
-                        CalendarView.DAY -> CalendarDayView(
-                            selectedDay, visibleEvents, reactions, activeIdentity, ::showEvent, ::addHeart, ::setMood,
-                        )
-                        CalendarView.WEEK -> CalendarWeekView(
-                            selectedDay, visibleEvents, ::selectDate, ::showEvent,
-                        )
-                        CalendarView.MONTH -> CalendarMonthView(
-                            selectedDay, visibleEvents, reactions, activeIdentity, ::selectDate, ::showEvent, ::addHeart, ::setMood,
-                        )
-                        CalendarView.AGENDA -> CalendarAgendaView(
-                            selectedDay, visibleEvents, ::selectDate, ::showEvent,
-                        )
                     }
                 }
             }
