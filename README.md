@@ -1,7 +1,7 @@
 # Календарик
 
 Android calendar for two people. The current phase is **local-only**: create, edit and delete personal and
-joint events, add unlimited red/pink hearts to each day, choose one mood per
+joint events, select one red/pink heart or none per person/day, choose one mood per
 person per day, show daily events and reactions in an Android widget, and
 check/install signed updates through GitHub Releases.
 
@@ -99,3 +99,22 @@ See [FIREBASE_SETUP.md](docs/FIREBASE_SETUP.md).
 
 Local database v3 is additive and does not delete old Room v1/v2 data.
 Encryption keys are NOT backed up: do not delete both devices before key export is available.
+
+## Network diagnostics and daily reactions
+
+Settings → **Диагностика сети** → **Сохранить и отправить ZIP** creates a
+bounded diagnostic ZIP with operation names, results, timing and coarse error
+classes. On Android 10+ it saves under Downloads/Calendarik/Diagnostics and
+opens the Android share sheet. On older Android, choose a location through the
+system file picker. The log never records event text, email, UIDs, credentials,
+pair keys or decrypted Firebase payloads; review the ZIP before sharing.
+Tap **Очистить журнал** to clear existing diagnostics.
+
+Room **v4** adds `heartChoice`: 0 = none, 1 = red, 2 = pink.
+Each user can select only one value per day. Older red/pink counters are
+preserved in the database as historic data (never overwritten by new taps).
+When upgrading, the more frequent old color is selected; red wins ties.
+Daily emoji picker now includes many more moods (including 💩) and remembers
+the last 12 selected emoji **locally per person**, across app updates.
+The encrypted snapshot format v2 supports `heartChoice` and can decode v1
+snapshots. Upgrade both phones for the new reaction semantics.

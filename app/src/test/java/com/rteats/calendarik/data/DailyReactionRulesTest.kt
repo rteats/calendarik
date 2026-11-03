@@ -28,6 +28,14 @@ class DailyReactionRulesTest {
         assertEquals(10_000L, r.redHearts)
     }
 
+    @Test fun legacyHeartKeepsDeterministicWinner() {
+        assertEquals(0, DailyReactionRules.legacyHeart(0, 0))
+        assertEquals(1, DailyReactionRules.legacyHeart(9, 3))
+        assertEquals(2, DailyReactionRules.legacyHeart(5, 8))
+        assertEquals(1, DailyReactionRules.legacyHeart(2, 2))
+        assertFalse(DailyReactionRules.isValidHeart(3))
+    }
+
     @Test fun rejectsInvalidOwner() {
         assertThrows(IllegalArgumentException::class.java) {
             DailyReactionRules.validateOwner(Authors.BOTH)

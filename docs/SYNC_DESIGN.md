@@ -24,3 +24,11 @@
   изменение состава пары и отзыв уже переданного ключа.
 - Полный автоматический emulator-тест Firestore Rules и
   два физических устройства для end-to-end испытаний.
+
+## Reaction wire format v2
+
+The outer Firestore encrypted-envelope schema remains 1; the encrypted inner
+calendar snapshot advances to version 2 with `heartChoice`. The decoder
+accepts version 1 snapshots, deriving one heart from historical color counts,
+and emits only version 2. Updated devices no longer increment historic counts.
+Both phones should update to this version for consistent one-heart behavior.

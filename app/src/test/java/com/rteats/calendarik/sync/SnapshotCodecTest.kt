@@ -22,8 +22,24 @@ class SnapshotCodecTest {
     @Test fun rejectsUnknownPayloadVersions() {
         val doc = SnapshotCodec.encode(CalendarSnapshot(listOf(event), emptyList()))
         assertThrows(IllegalArgumentException::class.java) {
-            SnapshotCodec.decode(doc.replace("\"version\":1", "\"version\":20"))
+            SnapshotCodec.decode(doc.replace("\"version\":2", "\"version\":20"))
         }
+    }
+
+    @Test fun oldV1ReactionsDecodeToOneHeart() {
+        val oldSnapshot = """{"version":1,"events":[],"reactions":[{"dateEpochDay":42,"authorId":1,"redHearts":3,"pinkHearts":9,"dayEmoji":"💩","revision":4,"updatedAtMillis":13}]}"""
+        val migrated = SnapshotCodec.decode(oldSnapshot)
+        assertEquals(2, migrated.reactions.single().heartChoice)
+        assertEquals(3L, migrated.reactions.single().redHearts)
+        assertEquals(9L, migrated.reactions.single().pinkHearts)
+        assertEquals("💩", migrated.reactions.single().dayEmoji)
+    }
+
+    @Test fun v2SnapshotPreservesChoiceAndLegacyCounts() {
+        val reaction = DailyReaction(43, 2, redHearts = 12, pinkHearts = 11, heartChoice = 2, revision = 29)
+        val encoded = SnapshotCodec.encode(CalendarSnapshot(emptyList(), listOf(reaction)))
+        assertEquals(2, SnapshotCodec.decode(encoded).reactions.single().heartChoice)
+        assertEquals(12L, SnapshotCodec.decode(encoded).reactions.single().redHearts)
     }
 
     @Test fun encryptedSnapshotCannotBeDecryptedWithoutKey() {

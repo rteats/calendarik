@@ -12,7 +12,7 @@ data class CalendarSnapshot(
 
 /** Versioned plaintext exists only in device memory and Room, never in Firestore. */
 object SnapshotCodec {
-    const val VERSION = 1
+    const val VERSION = 2
 
     fun encode(snapshot: CalendarSnapshot): String = JSONObject()
         .put("version", VERSION)
@@ -28,7 +28,8 @@ object SnapshotCodec {
     fun decode(source: String): CalendarSnapshot {
         require(source.length <= 750_000) { "Снимок слишком большой" }
         val data = JSONObject(source)
-        require(data.getInt("version") == VERSION) {
+        val receivedVersion = data.getInt("version")
+        require(receivedVersion in 1..VERSION) {
             "Неизвестная версия формата синхронизации; обновите приложение"
         }
         val events = data.getJSONArray("events")
@@ -36,7 +37,7 @@ object SnapshotCodec {
         require(events.length() < 5_000 && reactions.length() < 20_000)
         return CalendarSnapshot(
             (0 until events.length()).map { eventFromJson(events.getJSONObject(it)) },
-            (0 until reactions.length()).map { reactionFromJson(reactions.getJSONObject(it)) },
+            (0 until reactions.length()).map { reactionFromJson(reactions.getJSONObject(it), receivedVersion) },
         )
     }
 
@@ -77,16 +78,24 @@ object SnapshotCodec {
         .put("authorId", r.authorId)
         .put("redHearts", r.redHearts)
         .put("pinkHearts", r.pinkHearts)
+        .put("heartChoice", r.heartChoice)
         .put("dayEmoji", r.dayEmoji ?: JSONObject.NULL)
         .put("revision", r.revision)
         .put("updatedAtMillis", r.updatedAtMillis)
 
-    fun reactionFromJson(j: JSONObject): DailyReaction =
+    fun reactionFromJson(j: JSONObject, version: Int = VERSION): DailyReaction =
         DailyReaction(
             dateEpochDay = j.getLong("dateEpochDay"),
             authorId = j.getInt("authorId").also { require(it == 1 || it == 2) },
             redHearts = j.getLong("redHearts").also { require(it >= 0) },
             pinkHearts = j.getLong("pinkHearts").also { require(it >= 0) },
+            heartChoice = if (version == 1) {
+                com.rteats.calendarik.data.DailyReactionRules.legacyHeart(
+                    j.getLong("redHearts"), j.getLong("pinkHearts")
+                )
+            } else {
+                j.getInt("heartChoice").also { require(it in 0..2) }
+            },
             dayEmoji = if (j.isNull("dayEmoji")) null else j.getString("dayEmoji"),
             revision = j.getLong("revision").also { require(it >= 0) },
             updatedAtMillis = j.getLong("updatedAtMillis"),
