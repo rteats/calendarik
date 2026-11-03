@@ -10,9 +10,10 @@ import androidx.room.RoomDatabase
  * For each version > 1, add an explicit Migration and a migration test before release.
  * NEVER add fallbackToDestructiveMigration: deleting events during updates is forbidden.
  */
-@Database(entities = [CalendarEvent::class], version = 1, exportSchema = true)
+@Database(entities = [CalendarEvent::class, DailyReaction::class], version = 2, exportSchema = true)
 abstract class CalendarDatabase : RoomDatabase() {
     abstract fun events(): EventDao
+    abstract fun reactions(): DailyReactionDao
 
     companion object {
         @Volatile private var instance: CalendarDatabase? = null
@@ -23,7 +24,7 @@ abstract class CalendarDatabase : RoomDatabase() {
                     context.applicationContext,
                     CalendarDatabase::class.java,
                     "calendarik.db",
-                ).build().also { instance = it }
+                ).addMigrations(MIGRATION_1_2).build().also { instance = it }
             }
     }
 }

@@ -1,8 +1,9 @@
 # Календарик
 
-Android calendar for two people. The first phase is **local-only**: create, edit,
-delete and display personal and joint events, show them in an Android home-screen
-widget, and check/install signed updates through GitHub Releases.
+Android calendar for two people. The current phase is **local-only**: create, edit and delete personal and
+joint events, add unlimited red/pink hearts to each day, choose one mood per
+person per day, show daily events and reactions in an Android widget, and
+check/install signed updates through GitHub Releases.
 
 **Not available in this first phase:** Firebase sync, encryption, pairing, or
 multi-device collaboration. A profile switch is for testing the UI on one device,
@@ -11,6 +12,7 @@ not an authentication mechanism. Do not mistake it for access control.
 ## Build
 
 - Java 17, Gradle 9.6, Android SDK 36
+- Firebase SDK dependencies and public Android client configuration included
 - Run: \`gradle :app:assembleDebug\` (debug package is \`com.rteats.calendarik.debug\`)
 - Pull requests: Python policy checks, Android lint and JVM tests; no APK build
 - Main: APK build only. With signing secrets, main publishes a single rolling
@@ -48,6 +50,8 @@ in-place. Do not install the preview debug APK if you intend to keep its data.
 ## Data safety
 
 - Room is the local source of truth.
+- Room v2 adds `daily_reactions` with an explicit additive migration from v1, preserving old events and tombstones.
+- Hearts are 64-bit SQLite counters, incremented transactionally; mood replaces the previous value.
 - Events have immutable UUIDs, versioned payloads, author masks and revisions.
 - Deletes create tombstones rather than removing data.
 - The database exports a versioned schema.
@@ -65,6 +69,9 @@ See [DATA_COMPATIBILITY.md](docs/DATA_COMPATIBILITY.md) and
 
 All UI dates use the device time zone. Release names use Moscow time
 (\`YYYY.MM.DD.N\`). The increasing Android \`versionCode\` is separate from
-the calendar date counter. No Firebase configuration or private credentials
-are stored in the repository.
+the calendar date counter. The uploaded Firebase Android client config is committed to the repository;
+it contains public project identifiers, not a privileged service account or
+content-encryption key. The backend remains **locked** until real user
+authentication, pair access rules and end-to-end encryption are finished.
+See [FIREBASE_SETUP.md](docs/FIREBASE_SETUP.md).
 

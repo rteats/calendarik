@@ -23,5 +23,9 @@
 - [ ] Test failed migration does not silently recreate the DB.
 - [ ] Test install of release N over N-1 with same signing key.
 
-Room schema 1 is the baseline. No migrations are needed yet.
+Room schema 1 was the first shipped prototype. Schema 2 adds `daily_reactions`.
+`MIGRATION_1_2` is explicitly registered, and tests verify retention of
+existing events and tombstones. The v1 exported JSON schema was not committed
+in the first prototype; retain historical APKs and add schema snapshots to
+version control before introducing further migrations.
 

@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "444515535954",
+    "project_id": "calendarik-bff31",
+    "storage_bucket": "calendarik-bff31.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:444515535954:android:77e1299e7d36bbdc8a638b",
+        "android_client_info": {
+          "package_name": "com.rteats.calendarik"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCaa28xkHMNQ472K0S1BCWZ2lyeBt9QElo"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

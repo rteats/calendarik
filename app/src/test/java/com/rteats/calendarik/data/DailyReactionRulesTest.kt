@@ -1,0 +1,37 @@
+package com.rteats.calendarik.data
+
+import org.junit.Assert.*
+import org.junit.Test
+import java.time.LocalDate
+
+class DailyReactionRulesTest {
+    @Test fun retainsEmojiSequences() {
+        assertEquals("🥰", DailyReactionRules.sanitizeMood(" 🥰 "))
+        assertEquals("👩‍❤️‍👨", DailyReactionRules.sanitizeMood("👩‍❤️‍👨"))
+    }
+
+    @Test fun emptyMoodClearsTheSlot() {
+        assertNull(DailyReactionRules.sanitizeMood("  "))
+        assertNull(DailyReactionRules.sanitizeMood(null))
+    }
+
+    @Test fun rejectsLongMood() {
+        assertThrows(IllegalArgumentException::class.java) {
+            DailyReactionRules.sanitizeMood("а".repeat(40))
+        }
+    }
+
+    @Test fun dayKeyIsStable() {
+        val day = LocalDate.of(2026, 11, 3)
+        val r = DailyReaction(day.toEpochDay(), Authors.SASHA, redHearts = 10_000L)
+        assertEquals(day, r.day)
+        assertEquals(10_000L, r.redHearts)
+    }
+
+    @Test fun rejectsInvalidOwner() {
+        assertThrows(IllegalArgumentException::class.java) {
+            DailyReactionRules.validateOwner(Authors.BOTH)
+        }
+    }
+}
+
