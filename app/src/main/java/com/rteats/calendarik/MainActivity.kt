@@ -285,13 +285,13 @@ private fun CalendarikScreen() {
                         }
                     }
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        TextButton(onClick = { selectDate(selectedDay.minusDays(if (view == CalendarView.MONTH) selectedDay.lengthOfMonth().toLong() else if (view == CalendarView.WEEK) 7 else 1)) }) {
+                        TextButton(onClick = { selectDate(when (view) { CalendarView.MONTH -> selectedDay.minusMonths(1); CalendarView.WEEK -> selectedDay.minusWeeks(1); else -> selectedDay.minusDays(1) }) }) {
                             Text("‹", style = MaterialTheme.typography.headlineSmall)
                         }
                         TextButton(onClick = { showDatePicker = true }) {
                             Text(dateTitle(selectedDay, view), style = MaterialTheme.typography.labelLarge)
                         }
-                        TextButton(onClick = { selectDate(selectedDay.plusDays(if (view == CalendarView.MONTH) selectedDay.lengthOfMonth().toLong() else if (view == CalendarView.WEEK) 7 else 1)) }) {
+                        TextButton(onClick = { selectDate(when (view) { CalendarView.MONTH -> selectedDay.plusMonths(1); CalendarView.WEEK -> selectedDay.plusWeeks(1); else -> selectedDay.plusDays(1) }) }) {
                             Text("›", style = MaterialTheme.typography.headlineSmall)
                         }
                     }
