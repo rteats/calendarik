@@ -182,15 +182,20 @@ class CloudSync(private val context: Context) {
             require(local.authorMask == Authors.BOTH && incoming.authorMask == Authors.BOTH) {
                 "Конфликт личного события требует отдельного восстановления"
             }
-            val source: CalendarEvent = if (useRemote) incoming else local
-            database.events().save(
-                source.copy(
+            if (useRemote) {
+                // Accept the remote snapshot verbatim. Both devices can now
+                // converge on the SAME value and clear their dirty markers.
+                database.events().save(incoming)
+                database.sync().clearDirty(eventId)
+            } else {
+                // A local choice is a genuinely new revision for the peer.
+                database.events().save(local.copy(
                     revision = maxOf(local.revision, incoming.revision) + 1L,
                     lastEditor = pair.role,
                     updatedAtMillis = System.currentTimeMillis(),
-                )
-            )
-            database.sync().markDirty(com.rteats.calendarik.data.DirtySharedEvent(eventId))
+                ))
+                database.sync().markDirty(com.rteats.calendarik.data.DirtySharedEvent(eventId))
+            }
             database.sync().deleteConflict(eventId)
         }
         requestSoon(context)
