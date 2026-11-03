@@ -2,17 +2,19 @@ package com.rteats.calendarik.sync
 
 import com.rteats.calendarik.data.CalendarEvent
 import com.rteats.calendarik.data.DailyReaction
+import com.rteats.calendarik.data.SharedHeart
 import org.json.JSONArray
 import org.json.JSONObject
 
 data class CalendarSnapshot(
     val events: List<CalendarEvent>,
     val reactions: List<DailyReaction>,
+    val sharedHearts: List<SharedHeart> = emptyList(),
 )
 
 /** Versioned plaintext exists only in device memory and Room, never in Firestore. */
 object SnapshotCodec {
-    const val VERSION = 2
+    const val VERSION = 3
 
     fun encode(snapshot: CalendarSnapshot): String = JSONObject()
         .put("version", VERSION)
@@ -22,6 +24,9 @@ object SnapshotCodec {
         .put("reactions", JSONArray().apply {
             snapshot.reactions.sortedWith(compareBy({ it.dateEpochDay }, { it.authorId }))
                 .forEach { put(reactionToJson(it)) }
+        })
+        .put("sharedHearts", JSONArray().apply {
+            snapshot.sharedHearts.sortedBy { it.dateEpochDay }.forEach { put(heartToJson(it)) }
         })
         .toString()
 
@@ -34,10 +39,12 @@ object SnapshotCodec {
         }
         val events = data.getJSONArray("events")
         val reactions = data.getJSONArray("reactions")
-        require(events.length() < 5_000 && reactions.length() < 20_000)
+        val hearts = if (receivedVersion >= 3) data.getJSONArray("sharedHearts") else JSONArray()
+        require(events.length() < 5_000 && reactions.length() < 20_000 && hearts.length() < 20_000)
         return CalendarSnapshot(
             (0 until events.length()).map { eventFromJson(events.getJSONObject(it)) },
             (0 until reactions.length()).map { reactionFromJson(reactions.getJSONObject(it), receivedVersion) },
+            (0 until hearts.length()).map { heartFromJson(hearts.getJSONObject(it)) },
         )
     }
 
@@ -72,6 +79,21 @@ object SnapshotCodec {
             payloadVersion = 1,
         )
     }
+
+    fun heartToJson(h: SharedHeart): JSONObject = JSONObject()
+        .put("dateEpochDay", h.dateEpochDay)
+        .put("heartChoice", h.heartChoice)
+        .put("revision", h.revision)
+        .put("lastEditor", h.lastEditor)
+        .put("updatedAtMillis", h.updatedAtMillis)
+
+    fun heartFromJson(j: JSONObject): SharedHeart = SharedHeart(
+        dateEpochDay = j.getLong("dateEpochDay"),
+        heartChoice = j.getInt("heartChoice").also { require(it in 0..2) },
+        revision = j.getLong("revision").also { require(it >= 1) },
+        lastEditor = j.getInt("lastEditor").also { require(it in 1..2) },
+        updatedAtMillis = j.getLong("updatedAtMillis"),
+    )
 
     fun reactionToJson(r: DailyReaction): JSONObject = JSONObject()
         .put("dateEpochDay", r.dateEpochDay)

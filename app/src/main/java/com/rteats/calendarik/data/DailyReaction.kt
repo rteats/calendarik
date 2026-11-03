@@ -5,9 +5,9 @@ import androidx.room.Entity
 import java.time.LocalDate
 
 /**
- * One record per person and calendar day. Each user can select only one heart:
- * none (0), red (1) or pink (2). Historical counters are retained so an
- * update never silently destroys old reaction data.
+ * One mood per person and calendar day. Old per-author heart counters and
+ * choices remain in this schema for compatibility, but the active heart
+ * is a separate SharedHeart record that both people edit.
  *
  * dateEpochDay is an absolute calendar day independent of timezone or DST.
  */
@@ -42,12 +42,16 @@ object DailyReactionRules {
         else -> 1 // Red wins historic ties; old counters are retained.
     }
 
-    /** The Android UI can show only one nonblank emoji per owner/day. */
+    /** Either a compact Font Awesome icon ID or one legacy Unicode emoji. */
     fun sanitizeMood(emoji: String?): String? {
         val trimmed = emoji?.trim().orEmpty()
         if (trimmed.isBlank()) return null
         require(trimmed.length <= 32) { "Эмоция слишком длинная" }
-        require(trimmed.codePointCount(0, trimmed.length) <= 8) { "Выберите один смайлик" }
+        if (trimmed.startsWith("fa:")) {
+            require(Regex("^fa:[a-z0-9-]+$").matches(trimmed)) { "Некорректный значок" }
+        } else {
+            require(trimmed.codePointCount(0, trimmed.length) <= 8) { "Выберите один смайлик" }
+        }
         return trimmed
     }
 

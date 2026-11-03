@@ -48,7 +48,7 @@ class UpgradeV3ToV4Test {
             db.version = 3
         }
         val database = Room.databaseBuilder(context, CalendarDatabase::class.java, name)
-            .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
+            .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
             .build()
         try {
             assertTrue(database.events().byId("deleted")!!.deleted)
@@ -77,19 +77,20 @@ class UpgradeV3ToV4Test {
         }
     }
 
-    @Test fun onlyOneHeartSelectionPerDayAndIdempotentWrite() = runBlocking {
+    @Test fun onlyOneSharedHeartPerDayAndIdempotentWrite() = runBlocking {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         val database = Room.inMemoryDatabaseBuilder(context, CalendarDatabase::class.java).build()
         try {
-            val dao = database.reactions()
+            val dao = database.sharedHearts()
             dao.setHeart(42, Authors.SASHA, HeartColor.RED, 100)
-            dao.setHeart(42, Authors.SASHA, HeartColor.PINK, 200)
+            dao.setHeart(42, Authors.NASTYA, HeartColor.PINK, 200)
             dao.setHeart(42, Authors.SASHA, HeartColor.PINK, 300)
-            assertEquals(2, dao.get(42, Authors.SASHA)?.heartChoice)
-            assertEquals(2L, dao.get(42, Authors.SASHA)?.revision)
+            assertEquals(2, dao.get(42)?.heartChoice)
+            assertEquals(2L, dao.get(42)?.revision)
+            assertEquals(Authors.NASTYA, dao.get(42)?.lastEditor)
             dao.setHeart(42, Authors.SASHA, null, 400)
-            assertEquals(0, dao.get(42, Authors.SASHA)?.heartChoice)
-            assertEquals(3L, dao.get(42, Authors.SASHA)?.revision)
+            assertEquals(0, dao.get(42)?.heartChoice)
+            assertEquals(3L, dao.get(42)?.revision)
         } finally { database.close() }
     }
 }

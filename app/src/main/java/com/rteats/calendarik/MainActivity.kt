@@ -325,6 +325,13 @@ private fun CalendarikScreen() {
         )
     }
     val reactions by reactionsFlow.collectAsState(initial = emptyList())
+    val heartsFlow = remember(reactionWindow) {
+        db.sharedHearts().observeBetween(
+            reactionWindow.start.toEpochDay(),
+            reactionWindow.endExclusive.toEpochDay(),
+        )
+    }
+    val hearts by heartsFlow.collectAsState(initial = emptyList())
     val searchFlow = remember(searchOpen, searchQuery) {
         if (searchOpen && searchQuery.isNotBlank()) db.events().observeSearch(searchQuery.trim())
         else flowOf(emptyList())
@@ -541,14 +548,14 @@ private fun CalendarikScreen() {
                         Box(modifier = Modifier.fillMaxSize().padding(horizontal = 5.dp)) {
                             when (view) {
                                 CalendarView.DAY -> CalendarDayView(
-                                    selectedDay, visibleEvents, reactions, activeIdentity,
+                                    selectedDay, visibleEvents, reactions, hearts, activeIdentity,
                                     ::selectDate, ::showEvent, ::addHeart, ::setMood,
                                 )
                                 CalendarView.WEEK -> CalendarWeekView(
                                     selectedDay, visibleEvents, ::selectDate, ::showEvent,
                                 )
                                 CalendarView.MONTH -> CalendarMonthView(
-                                    selectedDay, visibleEvents, reactions, activeIdentity,
+                                    selectedDay, visibleEvents, reactions, hearts, activeIdentity,
                                     ::selectDate, ::showEvent, ::addHeart, ::setMood,
                                 )
                                 CalendarView.AGENDA -> CalendarAgendaView(

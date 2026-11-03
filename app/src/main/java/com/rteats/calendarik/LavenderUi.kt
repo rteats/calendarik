@@ -40,7 +40,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.rteats.calendarik.data.DailyReaction
+import com.rteats.calendarik.data.SharedHeart
+import com.rteats.calendarik.ui.HeartGlyph
+import com.rteats.calendarik.ui.MoodGlyph
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 import java.util.Locale
@@ -171,7 +173,7 @@ private val weekdayFormatter = DateTimeFormatter.ofPattern("EE", Locale.forLangu
 @Composable
 internal fun LavenderWeekStrip(
     day: LocalDate,
-    reactions: List<DailyReaction>,
+    hearts: List<SharedHeart>,
     onDate: (LocalDate) -> Unit,
 ) {
     val monday = day.minusDays((day.dayOfWeek.value - 1).toLong())
@@ -182,10 +184,8 @@ internal fun LavenderWeekStrip(
         repeat(7) { offset ->
             val date = monday.plusDays(offset.toLong())
             val selected = date == day
-            val hasHeart = reactions.any {
-                it.dateEpochDay == date.toEpochDay() &&
-                    it.heartChoice != 0
-            }
+            val heart = hearts.firstOrNull { it.dateEpochDay == date.toEpochDay() }
+            val color = com.rteats.calendarik.data.HeartColor.fromPersisted(heart?.heartChoice ?: 0)
             Column(
                 modifier = Modifier
                     .weight(1f)
@@ -220,12 +220,9 @@ internal fun LavenderWeekStrip(
                         style = MaterialTheme.typography.titleMedium,
                     )
                 }
-                Text(
-                    if (hasHeart) "♥" else " ",
-                    color = Color(0xFFD46AC0),
-                    fontSize = 12.sp,
-                    lineHeight = 12.sp,
-                )
+                Box(Modifier.size(14.dp), contentAlignment = Alignment.Center) {
+                    if (color != null) HeartGlyph(color, Modifier.size(12.dp))
+                }
             }
         }
     }
@@ -245,6 +242,6 @@ internal fun LavenderMoodOrb(
             .border(1.dp, Color.White.copy(alpha = .80f), CircleShape),
         contentAlignment = Alignment.Center,
     ) {
-        Text(emoji ?: "·", fontSize = 16.sp, maxLines = 1, overflow = TextOverflow.Clip)
+        MoodGlyph(emoji, Modifier.size(17.dp), tint = LavenderUi.violet)
     }
 }

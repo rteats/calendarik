@@ -54,6 +54,8 @@ import com.rteats.calendarik.data.Authors
 import com.rteats.calendarik.data.CalendarEvent
 import com.rteats.calendarik.data.DailyReaction
 import com.rteats.calendarik.data.HeartColor
+import com.rteats.calendarik.data.SharedHeart
+import com.rteats.calendarik.ui.HeartGlyph
 import com.rteats.calendarik.ui.DayReactionsPanel
 import java.time.Instant
 import java.time.LocalDate
@@ -226,6 +228,7 @@ internal fun CalendarDayView(
     selectedDay: LocalDate,
     events: List<CalendarEvent>,
     reactions: List<DailyReaction>,
+    sharedHearts: List<SharedHeart>,
     identity: Int,
     onDate: (LocalDate) -> Unit,
     onOpen: (CalendarEvent) -> Unit,
@@ -240,7 +243,7 @@ internal fun CalendarDayView(
         verticalArrangement = Arrangement.spacedBy(9.dp),
     ) {
         item {
-            LavenderWeekStrip(selectedDay, reactions, onDate)
+            LavenderWeekStrip(selectedDay, sharedHearts, onDate)
         }
         if (selectedDay == LocalDate.now()) {
             item {
@@ -306,6 +309,7 @@ internal fun CalendarDayView(
             SectionTitle("Наш день")
             DayReactionsPanel(
                 reactions = reactions.filter { it.dateEpochDay == selectedDay.toEpochDay() },
+                sharedHeart = sharedHearts.firstOrNull { it.dateEpochDay == selectedDay.toEpochDay() },
                 actingAs = identity,
                 onHeart = onHeart,
                 onMood = onMood,
@@ -427,13 +431,15 @@ internal fun CalendarMonthView(
     selectedDay: LocalDate,
     events: List<CalendarEvent>,
     reactions: List<DailyReaction>,
+    sharedHearts: List<SharedHeart>,
     identity: Int,
     onDate: (LocalDate) -> Unit,
     onOpen: (CalendarEvent) -> Unit,
     onHeart: (HeartColor?) -> Unit,
     onMood: (String?) -> Unit,
 ) {
-    var showMoods by rememberSaveable { mutableStateOf(false) }
+    // Events, shared hearts and personal moods are separate calendar layers.
+    var overlay by rememberSaveable { mutableStateOf(0) }
     val window = dateWindow(selectedDay, CalendarView.MONTH)
     val days = (0 until java.time.temporal.ChronoUnit.DAYS.between(window.start, window.endExclusive).toInt())
         .map { window.start.plusDays(it.toLong()) }
@@ -447,8 +453,13 @@ internal fun CalendarMonthView(
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            FilterChip(selected = !showMoods, onClick = { showMoods = false }, label = { Text("События и сердечки") })
-            FilterChip(selected = showMoods, onClick = { showMoods = true }, label = { Text("Настроения") })
+            listOf("События", "Сердечки", "Настроения").forEachIndexed { index, label ->
+                FilterChip(
+                    selected = overlay == index,
+                    onClick = { overlay = index },
+                    label = { Text(label) },
+                )
+            }
         }
         Surface(
             shape = RoundedCornerShape(26.dp),
@@ -478,7 +489,7 @@ internal fun CalendarMonthView(
                             Column(
                                 modifier = Modifier
                                     .weight(1f)
-                                    .height(if (showMoods) 85.dp else 74.dp)
+                                    .height(if (overlay == 2) 85.dp else 74.dp)
                                     .padding(2.dp)
                                     .clip(RoundedCornerShape(17.dp))
                                     .background(
@@ -509,7 +520,7 @@ internal fun CalendarMonthView(
                                             else LavenderUi.muted.copy(alpha = .40f),
                                     )
                                 }
-                                if (showMoods) {
+                                if (overlay == 2) {
                                     Row(horizontalArrangement = Arrangement.spacedBy(1.dp)) {
                                         listOf(Authors.SASHA to LavenderUi.blue, Authors.NASTYA to LavenderUi.pink)
                                             .forEach { (author, tint) ->
@@ -519,20 +530,16 @@ internal fun CalendarMonthView(
                                                 }
                                             }
                                     }
-                                } else {
+                                } else if (overlay == 0) {
                                     Row(horizontalArrangement = Arrangement.spacedBy(3.dp)) {
                                         dateEvents.map { it.authorMask }.distinct().take(3).forEach { author ->
                                             Box(Modifier.size(6.dp).background(eventColor(author), CircleShape))
                                         }
                                     }
-                                    if (entries.any { it.heartChoice != 0 }) {
-                                        Text(
-                                            "♥",
-                                            color = Color(0xFFCE60B9),
-                                            fontSize = 14.sp,
-                                            lineHeight = 14.sp,
-                                        )
-                                    }
+                                } else {
+                                    val heart = sharedHearts.firstOrNull { it.dateEpochDay == date.toEpochDay() }
+                                    val color = HeartColor.fromPersisted(heart?.heartChoice ?: 0)
+                                    if (color != null) HeartGlyph(color, Modifier.size(17.dp))
                                 }
                             }
                         }
@@ -562,6 +569,7 @@ internal fun CalendarMonthView(
         Spacer(Modifier.height(8.dp))
         DayReactionsPanel(
             reactions = reactions.filter { it.dateEpochDay == selectedDay.toEpochDay() },
+            sharedHeart = sharedHearts.firstOrNull { it.dateEpochDay == selectedDay.toEpochDay() },
             actingAs = identity,
             onHeart = onHeart,
             onMood = onMood,

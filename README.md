@@ -118,3 +118,6 @@ Daily emoji picker now includes many more moods (including 💩) and remembers
 the last 12 selected emoji **locally per person**, across app updates.
 The encrypted snapshot format v2 supports `heartChoice` and can decode v1
 snapshots. Upgrade both phones for the new reaction semantics.
+
+
+Reaction icon attribution: [Font Awesome Free](docs/ICON_ATTRIBUTION.md).
