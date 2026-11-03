@@ -83,12 +83,19 @@ object SnapshotCodec {
         .put("revision", r.revision)
         .put("updatedAtMillis", r.updatedAtMillis)
 
-    fun reactionFromJson(j: JSONObject): DailyReaction =
+    fun reactionFromJson(j: JSONObject, version: Int = VERSION): DailyReaction =
         DailyReaction(
             dateEpochDay = j.getLong("dateEpochDay"),
             authorId = j.getInt("authorId").also { require(it == 1 || it == 2) },
             redHearts = j.getLong("redHearts").also { require(it >= 0) },
             pinkHearts = j.getLong("pinkHearts").also { require(it >= 0) },
+            heartChoice = if (version == 1) {
+                com.rteats.calendarik.data.DailyReactionRules.legacyHeart(
+                    j.getLong("redHearts"), j.getLong("pinkHearts")
+                )
+            } else {
+                j.getInt("heartChoice").also { require(it in 0..2) }
+            },
             dayEmoji = if (j.isNull("dayEmoji")) null else j.getString("dayEmoji"),
             revision = j.getLong("revision").also { require(it >= 0) },
             updatedAtMillis = j.getLong("updatedAtMillis"),
