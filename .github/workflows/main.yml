@@ -102,10 +102,37 @@ jobs:
       - name: Build consistently signed release
         if: steps.signing.outputs.enabled == 'true'
         run: |
-          gradle --no-daemon assembleRelease -PVERSION_CODE="$VERSION_CODE" -PVERSION_NAME="$VERSION_NAME"
+          gradle --no-daemon assembleRelease \
+            -POPTIMIZE_RELEASE=true \
+            -PVERSION_CODE="$VERSION_CODE" \
+            -PVERSION_NAME="$VERSION_NAME"
           cp app/build/outputs/apk/release/app-release.apk Calendarik.apk
           SHA256="$(sha256sum Calendarik.apk | cut -d ' ' -f1)"
           printf '{"versionCode":%s,"versionName":"%s","sha256":"%s"}\n' "$VERSION_CODE" "$VERSION_NAME" "$SHA256" > update.json
+      - name: Report APK size compared with previous release
+        if: steps.signing.outputs.enabled == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          CURRENT_BYTES="$(stat -c%s Calendarik.apk)"
+          PREVIOUS_BYTES="$(gh api "repos/$GITHUB_REPOSITORY/releases/tags/latest" \
+            --jq '.assets[] | select(.name == "Calendarik.apk") | .size' 2>/dev/null | head -n 1 || true)"
+          {
+            echo "## Signed APK size"
+            echo
+            echo "- New: $(numfmt --to=iec-i --suffix=B "$CURRENT_BYTES") ($CURRENT_BYTES bytes)"
+            if [[ "$PREVIOUS_BYTES" =~ ^[0-9]+$ ]] && [ "$PREVIOUS_BYTES" -gt 0 ]; then
+              DELTA_BYTES=$((CURRENT_BYTES - PREVIOUS_BYTES))
+              DELTA_PERCENT="$(awk -v d="$DELTA_BYTES" -v p="$PREVIOUS_BYTES" 'BEGIN { printf "%.1f", 100*d/p }')"
+              echo "- Previous: $(numfmt --to=iec-i --suffix=B "$PREVIOUS_BYTES") ($PREVIOUS_BYTES bytes)"
+              echo "- Difference: $DELTA_BYTES bytes ($DELTA_PERCENT%)"
+            else
+              echo "- Previous APK: not available for comparison"
+            fi
+            echo "- Optimization: R8 code shrinking + Android resource shrinking"
+          } >> "$GITHUB_STEP_SUMMARY"
+          echo "APK bytes: $CURRENT_BYTES"
       - name: Upload signed release artifact
         if: steps.signing.outputs.enabled == 'true'
         uses: actions/upload-artifact@v4
