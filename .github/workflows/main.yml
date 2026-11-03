@@ -62,8 +62,28 @@ jobs:
         if: steps.signing.outputs.enabled == 'true'
         run: |
           test -s "$CALENDARIK_KEYSTORE_FILE"
+          # Confirm the store can be read. Never print the private key or passwords.
           keytool -list -keystore "$CALENDARIK_KEYSTORE_FILE" \
             -storetype PKCS12 -storepass "$CALENDARIK_STORE_PASSWORD" >/dev/null
+          # Some keystores have a different alias from the configured secret.
+          # Only auto-select when there is EXACTLY ONE actual private key.
+          if ! keytool -list -v -alias "$CALENDARIK_KEY_ALIAS" \
+              -keystore "$CALENDARIK_KEYSTORE_FILE" -storetype PKCS12 \
+              -storepass "$CALENDARIK_STORE_PASSWORD" 2>/dev/null \
+              | grep -q 'Entry type: PrivateKeyEntry'; then
+            mapfile -t PRIVATE_ALIASES < <(
+              keytool -list -v -keystore "$CALENDARIK_KEYSTORE_FILE" \
+                -storetype PKCS12 -storepass "$CALENDARIK_STORE_PASSWORD" |
+                awk '/^Alias name: / { alias = substr($0, 13) }
+                     /^Entry type: PrivateKeyEntry/ { print alias }'
+            )
+            if [ "${#PRIVATE_ALIASES[@]}" -ne 1 ]; then
+              echo "Configured alias is missing or not a private key, and keystore does not have exactly one private-key alias." >&2
+              exit 1
+            fi
+            echo "Configured alias mismatch; using the keystore's only private-key alias."
+            echo "CALENDARIK_KEY_ALIAS=${PRIVATE_ALIASES[0]}" >> "$GITHUB_ENV"
+          fi
       - name: Build consistently signed release
         if: steps.signing.outputs.enabled == 'true'
         run: |
