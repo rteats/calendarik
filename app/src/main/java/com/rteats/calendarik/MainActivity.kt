@@ -88,6 +88,7 @@ import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 import com.rteats.calendarik.update.GithubUpdater
 import com.rteats.calendarik.update.UpdateManifest
+import com.rteats.calendarik.widget.WidgetNavigation
 import com.rteats.calendarik.widget.refreshWidgets
 import java.time.Instant
 import java.time.LocalDate
@@ -106,6 +107,10 @@ private val violetBackground = Color(0xFFF7F4FF)
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        val widgetDay = intent?.getStringExtra(WidgetNavigation.EXTRA_DAY)
+            ?.let { runCatching { LocalDate.parse(it).toString() }.getOrNull() }
+        val widgetEventId = intent?.getStringExtra(WidgetNavigation.EXTRA_EVENT_ID)
+        val widgetCreate = intent?.getBooleanExtra(WidgetNavigation.EXTRA_NEW_EVENT, false) == true
         setContent {
             val light = lightColorScheme(
                 primary = LavenderUi.violet,
@@ -129,7 +134,7 @@ class MainActivity : ComponentActivity() {
             // This illustration-led surface uses a consistent light pastel palette.
             // Dark system colors would make labels unreadable on the translucent cards.
             MaterialTheme(colorScheme = light) {
-                LavenderBackdrop { CalendarikScreen() }
+                LavenderBackdrop { CalendarikScreen(widgetDay, widgetEventId, widgetCreate) }
             }
         }
     }
@@ -137,7 +142,7 @@ class MainActivity : ComponentActivity() {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun CalendarikScreen() {
+private fun CalendarikScreen(widgetDay: String?, widgetEventId: String?, widgetCreate: Boolean) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val db = remember { CalendarDatabase.get(context) }
@@ -286,9 +291,9 @@ private fun CalendarikScreen() {
         }
     }
 
-    var dateText by rememberSaveable { mutableStateOf(LocalDate.now().toString()) }
+    var dateText by rememberSaveable { mutableStateOf(widgetDay ?: LocalDate.now().toString()) }
     val selectedDay = remember(dateText) { LocalDate.parse(dateText) }
-    var view by rememberSaveable { mutableStateOf(CalendarView.MONTH) }
+    var view by rememberSaveable { mutableStateOf(if (widgetDay != null) CalendarView.DAY else CalendarView.MONTH) }
     var filter by rememberSaveable { mutableIntStateOf(0) }
     var searchOpen by rememberSaveable { mutableStateOf(false) }
     var searchQuery by rememberSaveable { mutableStateOf("") }
@@ -297,9 +302,14 @@ private fun CalendarikScreen() {
     var settingsOpen by remember { mutableStateOf(false) }
     var showDatePicker by remember { mutableStateOf(false) }
 
-    var editorOpen by remember { mutableStateOf(false) }
+    var editorOpen by remember { mutableStateOf(widgetCreate) }
     var editing by remember { mutableStateOf<CalendarEvent?>(null) }
     var viewing by remember { mutableStateOf<CalendarEvent?>(null) }
+    LaunchedEffect(widgetEventId) {
+        if (widgetEventId != null) {
+            viewing = db.events().byId(widgetEventId)?.takeUnless { it.deleted }
+        }
+    }
     var deleteCandidate by remember { mutableStateOf<CalendarEvent?>(null) }
     var error by remember { mutableStateOf<String?>(null) }
 
