@@ -39,6 +39,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -240,10 +241,11 @@ internal fun CalendarWeekView(
     val days = (0..6).map { monday.plusDays(it.toLong()) }
     val cellWidth = 142.dp
     val hourHeight = 62.dp
-    val gridHeight = hourHeight * 16
+    val gridHeight = hourHeight * 24
     val scroll = rememberScrollState()
 
-    Column(modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
+    val initialScroll = with(LocalDensity.current) { (hourHeight * 7).roundToPx() }
+    Column(modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState(initial = initialScroll))) {
         Text(
             "Нажмите на дату, чтобы выбрать день. Сетка прокручивается по горизонтали.",
             modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
@@ -253,7 +255,7 @@ internal fun CalendarWeekView(
         Row(modifier = Modifier.horizontalScroll(scroll).padding(start = 8.dp, end = 16.dp)) {
             Column(modifier = Modifier.width(48.dp)) {
                 Spacer(Modifier.height(55.dp))
-                (7..22).forEach { hour ->
+                (0..23).forEach { hour ->
                     Text(
                         hour.toString().padStart(2, '0') + ":00",
                         modifier = Modifier.height(hourHeight).padding(top = 4.dp),
@@ -281,18 +283,18 @@ internal fun CalendarWeekView(
                     Spacer(Modifier.height(7.dp))
                     Box(modifier = Modifier.height(gridHeight).fillMaxWidth()) {
                         Column {
-                            repeat(16) {
+                            repeat(24) {
                                 Box(modifier = Modifier.fillMaxWidth().height(hourHeight)) {
                                     HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f))
                                 }
                             }
                         }
                         events.filter { eventDay(it) == date }.forEach { event ->
-                            // Fit timed events to the visible 07:00–23:00 grid.
-                            val start = eventStartMinute(event).coerceIn(7 * 60, 23 * 60)
-                            val end = eventEndMinute(event).coerceIn(7 * 60, 23 * 60)
+                            // Include all hours, including early morning and late night.
+                            val start = eventStartMinute(event).coerceIn(0, 24 * 60)
+                            val end = eventEndMinute(event).coerceIn(0, 24 * 60)
                             if (end > start) {
-                                val position = (start - 420) * 62f / 60f
+                                val position = start * 62f / 60f
                                 val duration = ((end - start) * 62f / 60f).coerceAtLeast(30f)
                                 val accent = eventColor(event.authorMask)
                                 Column(
