@@ -1,29 +1,26 @@
-# Next phase: encrypted two-person synchronization
+# Децентрализованная модель данных
 
-This document is a **design**, not an implemented feature.
+## Реализовано
 
-- Each person owns personal events; both may edit joint events.
-- Store durable local events and an outbox of signed operations.
-- Pair through a QR code containing a randomly generated enrollment secret.
-  Establish separately authenticated identities (do not trust an editable
-  local profile selector).
-- Use authenticated AEAD encryption (AES-GCM with unique nonces) **before**
-  sending data to Firestore. Separate transport authentication, data access
-  rules and end-to-end encryption. Never commit account secrets.
-- Version every encrypted envelope; preserve and test old decoders.
-- Acknowledge revisions per peer; a tombstone may be garbage-collected only
-  after all required acknowledgements.
-- Merge independent edits; report conflicts when both change the same event
-  field while offline, rather than silently choosing a winner.
-- Only the two enrolled devices may write; validate membership in Firestore
-  Security Rules. Relying on a hard-to-guess collection path alone is NOT
-  authorization.
-- Cloud data is encrypted; a server still learns metadata such as access
-  times, request sizes and account identifiers.
-- Room remains the read source for UI and widget. WorkManager handles
-  deferred sync. The widget itself must not open network connections.
+- Firebase Authentication Email/Password; два отдельно зарегистрированных UID.
+- Локальный Room календарь v3 с явными миграциями v1→v2→v3.
+- Разрешения: личное событие меняет только его автор, совместное — оба.
+- Сопряжение через QR: случайный ID пары, 256-битный ключ AES и
+  ручное подтверждение второго пользователя создателем.
+- AES-256-GCM с уникальным nonce и привязкой AAD к pairId и writerUid.
+- Два зашифрованных снимка в `pairs/{pairId}/snapshots/{uid}`.
+- Серверные Security Rules с белым списком двух UID и проверкой
+  роли автора снимка. Их надо опубликовать в Firebase Console.
+- Фоновое обновление через WorkManager, обновления при открытом
+  приложении через Firestore snapshot listener.
+- Конфликтные изменения общего события сохраняются отдельно.
+- Локальные данные сохраняются без интернет-соединения.
 
-Prerequisites for implementing and testing live sync: a Firebase project,
-Firestore, Authentication, approved rules, and two test accounts/devices.
-The project config should be supplied via local config or CI secrets.
+## Не реализовано
 
+- Экспорт и восстановление ключей при потере обоих телефонов.
+- Шардирование снимков, если их размер превысит 600 КБ.
+- Поддержка более двух аккаунтов, дополнительных устройств,
+  изменение состава пары и отзыв уже переданного ключа.
+- Полный автоматический emulator-тест Firestore Rules и
+  два физических устройства для end-to-end испытаний.

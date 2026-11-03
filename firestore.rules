@@ -1,8 +1,122 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Locked until we ship real authentication, verified pair enrollment
-    // and end-to-end encrypted sync. A random document ID is NOT access control.
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    // Users are provisioned by the project owner in the Firebase Console.
+    // This limits Firestore usage to the TWO known Firebase Auth UIDs.
+    function approved() {
+      return signedIn() &&
+        exists(/databases/$(database)/documents/approvedUsers/$(request.auth.uid)) &&
+        get(/databases/$(database)/documents/approvedUsers/$(request.auth.uid)).data.enabled == true;
+    }
+
+    function pairData(pairId) {
+      return get(/databases/$(database)/documents/pairs/$(pairId)).data;
+    }
+
+    function isCreator(pairId) {
+      return approved() && pairData(pairId).creatorUid == request.auth.uid;
+    }
+
+    function isMember(pairId) {
+      return approved() && pairData(pairId).memberUids.hasAny([request.auth.uid]);
+    }
+
+    // No clients can whitelist themselves.
+    match /approvedUsers/{uid} {
+      allow read, write: if false;
+    }
+
+    match /pairs/{pairId} {
+      allow create: if approved() &&
+        request.resource.data.keys().hasAll(
+          ['creatorUid', 'creatorRole', 'memberUids', 'joinerUid', 'schema']
+        ) &&
+        request.resource.data.keys().hasOnly(
+          ['creatorUid', 'creatorRole', 'memberUids', 'joinerUid', 'schema']
+        ) &&
+        request.resource.data.creatorUid == request.auth.uid &&
+        request.resource.data.creatorRole in [1, 2] &&
+        request.resource.data.memberUids == [request.auth.uid] &&
+        request.resource.data.joinerUid == '' &&
+        request.resource.data.schema == 1;
+
+      allow get: if approved() &&
+        resource.data.memberUids.hasAny([request.auth.uid]);
+      allow list: if false;
+
+      // One irreversible approval, controlled by the creator only.
+      allow update: if isCreator(pairId) &&
+        resource.data.memberUids == [request.auth.uid] &&
+        request.resource.data.creatorUid == resource.data.creatorUid &&
+        request.resource.data.creatorRole == resource.data.creatorRole &&
+        request.resource.data.schema == resource.data.schema &&
+        request.resource.data.diff(resource.data).affectedKeys()
+          .hasOnly(['memberUids', 'joinerUid']) &&
+        request.resource.data.joinerUid is string &&
+        request.resource.data.joinerUid != '' &&
+        request.resource.data.joinerUid != request.auth.uid &&
+        request.resource.data.memberUids ==
+          [request.auth.uid, request.resource.data.joinerUid] &&
+        exists(/databases/$(database)/documents/pairs/$(pairId)/requests/$(request.resource.data.joinerUid));
+
+      allow delete: if false;
+
+      match /requests/{requesterUid} {
+        allow create: if approved() &&
+          request.auth.uid == requesterUid &&
+          exists(/databases/$(database)/documents/pairs/$(pairId)) &&
+          pairData(pairId).memberUids.size() == 1 &&
+          pairData(pairId).creatorUid != request.auth.uid &&
+          request.resource.data.keys().hasOnly(
+            ['requesterUid', 'requesterEmail', 'status']
+          ) &&
+          request.resource.data.keys().hasAll(
+            ['requesterUid', 'requesterEmail', 'status']
+          ) &&
+          request.resource.data.requesterUid == request.auth.uid &&
+          request.resource.data.requesterEmail == request.auth.token.email &&
+          request.resource.data.status == 'pending';
+
+        allow get: if approved() &&
+          (request.auth.uid == requesterUid || isCreator(pairId));
+        allow list: if isCreator(pairId);
+
+        allow update: if isCreator(pairId) &&
+          resource.data.status == 'pending' &&
+          request.resource.data.status == 'accepted' &&
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status']);
+
+        allow delete: if false;
+      }
+
+      // The server stores ONLY AES-GCM ciphertext, nonce and access metadata.
+      match /snapshots/{writerUid} {
+        allow read: if isMember(pairId);
+        allow create, update: if isMember(pairId) &&
+          request.auth.uid == writerUid &&
+          request.resource.data.keys().hasAll(
+            ['writerUid', 'schema', 'nonce', 'ciphertext', 'updatedAt']
+          ) &&
+          request.resource.data.keys().hasOnly(
+            ['writerUid', 'schema', 'nonce', 'ciphertext', 'updatedAt']
+          ) &&
+          request.resource.data.writerUid == writerUid &&
+          request.resource.data.schema == 1 &&
+          request.resource.data.nonce is string &&
+          request.resource.data.nonce.size() == 16 &&
+          request.resource.data.ciphertext is string &&
+          request.resource.data.ciphertext.size() > 16 &&
+          request.resource.data.ciphertext.size() < 950000 &&
+          request.resource.data.updatedAt == request.time;
+        allow delete: if false;
+      }
+    }
+
+    // Explicitly deny unknown document paths.
     match /{document=**} {
       allow read, write: if false;
     }

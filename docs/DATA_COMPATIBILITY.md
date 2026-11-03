@@ -29,3 +29,7 @@ existing events and tombstones. The v1 exported JSON schema was not committed
 in the first prototype; retain historical APKs and add schema snapshots to
 version control before introducing further migrations.
 
+
+Room schema 3 adds only `dirty_shared_events` and `sync_conflicts`.
+Both are additive and preserve all previous events and daily reactions.
+The v2->v3 migration is registered together with v1->v2.

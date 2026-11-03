@@ -9,6 +9,12 @@ import kotlinx.coroutines.flow.Flow
 
 @Dao
 interface DailyReactionDao {
+    @Query("SELECT * FROM daily_reactions WHERE authorId = :authorId ORDER BY dateEpochDay")
+    suspend fun allByAuthor(authorId: Int): List<DailyReaction>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsert(reaction: DailyReaction)
+
     @Query("SELECT * FROM daily_reactions WHERE dateEpochDay = :dateEpochDay ORDER BY authorId")
     fun observeDay(dateEpochDay: Long): Flow<List<DailyReaction>>
 

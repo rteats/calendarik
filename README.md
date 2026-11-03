@@ -5,9 +5,11 @@ joint events, add unlimited red/pink hearts to each day, choose one mood per
 person per day, show daily events and reactions in an Android widget, and
 check/install signed updates through GitHub Releases.
 
-**Not available in this first phase:** Firebase sync, encryption, pairing, or
-multi-device collaboration. A profile switch is for testing the UI on one device,
-not an authentication mechanism. Do not mistake it for access control.
+**Two-person encrypted sync is now implemented** using Firebase Authentication,
+a QR invitation, Android Keystore, AES-GCM encryption, Firestore snapshots, and
+WorkManager. Follow [Firebase setup](docs/FIREBASE_SETUP.md) to whitelist the
+two account UIDs and deploy Security Rules before pairing. The local profile
+switch remains for offline/demo use only; a paired account has a locked role.
 
 ## Build
 
@@ -75,3 +77,6 @@ content-encryption key. The backend remains **locked** until real user
 authentication, pair access rules and end-to-end encryption are finished.
 See [FIREBASE_SETUP.md](docs/FIREBASE_SETUP.md).
 
+
+Local database v3 is additive and does not delete old Room v1/v2 data.
+Encryption keys are NOT backed up: do not delete both devices before key export is available.

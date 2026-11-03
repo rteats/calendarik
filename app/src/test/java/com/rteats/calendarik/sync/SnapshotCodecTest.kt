@@ -1,0 +1,36 @@
+package com.rteats.calendarik.sync
+
+import com.rteats.calendarik.data.CalendarEvent
+import com.rteats.calendarik.data.DailyReaction
+import org.junit.Assert.*
+import org.junit.Test
+
+class SnapshotCodecTest {
+    private val event = CalendarEvent("uuid", "Учёба", "notes", 100, 200,
+        3, 1, 10, 12, 13, false, 1)
+
+    @Test fun snapshotRoundTripKeepsAuthorsAndTombstones() {
+        val original = CalendarSnapshot(
+            listOf(event.copy(deleted = true)),
+            listOf(DailyReaction(42, 2, redHearts = 123, dayEmoji = "😴", revision = 9)),
+        )
+        val restored = SnapshotCodec.decode(SnapshotCodec.encode(original))
+        assertEquals(original.events, restored.events)
+        assertEquals(original.reactions, restored.reactions)
+    }
+
+    @Test fun rejectsUnknownPayloadVersions() {
+        val doc = SnapshotCodec.encode(CalendarSnapshot(listOf(event), emptyList()))
+        assertThrows(IllegalArgumentException::class.java) {
+            SnapshotCodec.decode(doc.replace("\"version\":1", "\"version\":20"))
+        }
+    }
+
+    @Test fun encryptedSnapshotCannotBeDecryptedWithoutKey() {
+        val key = PairCrypto.newKey()
+        val serialized = SnapshotCodec.encode(CalendarSnapshot(listOf(event), emptyList()))
+        val cipher = PairCrypto.seal(key, "pair", "author-uid", serialized)
+        assertEquals(serialized, PairCrypto.open(key, "pair", "author-uid", cipher))
+        assertFalse(cipher.ciphertext.contains("Учёба"))
+    }
+}
