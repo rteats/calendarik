@@ -84,6 +84,21 @@ jobs:
             echo "Configured alias mismatch; using the keystore's only private-key alias."
             echo "CALENDARIK_KEY_ALIAS=${PRIVATE_ALIASES[0]}" >> "$GITHUB_ENV"
           fi
+      - name: Verify actual private-key password before release build
+        if: steps.signing.outputs.enabled == 'true'
+        run: |
+          if java scripts/VerifySigningKey.java "$CALENDARIK_KEYSTORE_FILE" "$CALENDARIK_KEY_ALIAS" >/dev/null 2>&1; then
+            echo "Private-key password verified."
+          elif CALENDARIK_KEY_PASSWORD="$CALENDARIK_STORE_PASSWORD" \
+              java scripts/VerifySigningKey.java "$CALENDARIK_KEYSTORE_FILE" "$CALENDARIK_KEY_ALIAS" >/dev/null 2>&1; then
+            # A PKCS#12 private key normally uses the same password as its store.
+            echo "CALENDARIK_KEY_PASSWORD=$CALENDARIK_STORE_PASSWORD" >> "$GITHUB_ENV"
+            echo "Using PKCS#12 store password as the private-key password."
+          else
+            echo "Signing key cannot be read using either configured key password or store password." >&2
+            echo "Correct GitHub Actions secret CALENDARIK_KEY_PASSWORD; do not publish passwords." >&2
+            exit 1
+          fi
       - name: Build consistently signed release
         if: steps.signing.outputs.enabled == 'true'
         run: |
