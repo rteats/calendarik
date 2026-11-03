@@ -206,8 +206,6 @@ private fun CalendarikScreen() {
         }
     }
 
-    // Until authenticated pairing is implemented this is an explicit LOCAL demo identity.
-
     var dateText by rememberSaveable { mutableStateOf(LocalDate.now().toString()) }
     val selectedDay = remember(dateText) { LocalDate.parse(dateText) }
     var view by rememberSaveable { mutableStateOf(CalendarView.WEEK) }
@@ -546,7 +544,7 @@ private fun CalendarikScreen() {
     if (settingsOpen) {
         ModalBottomSheet(onDismissRequest = { settingsOpen = false }) {
             Column(
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp).padding(bottom = 32.dp),
+                modifier = Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(horizontal = 24.dp).padding(bottom = 32.dp),
                 verticalArrangement = Arrangement.spacedBy(16.dp),
             ) {
                 Text("Саша и Настя", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.SemiBold)
