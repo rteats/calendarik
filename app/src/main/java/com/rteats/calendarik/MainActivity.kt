@@ -340,7 +340,7 @@ private fun CalendarikScreen() {
                 }.onFailure { updateText = "Ошибка проверки: " + (it.message ?: "нет соединения") }
         }
     }
-    fun addHeart(color: HeartColor) {
+    fun addHeart(color: HeartColor?) {
         scope.launch {
             runCatching {
                 editRepository.heart(selectedDay.toEpochDay(), activeIdentity, color)
