@@ -50,6 +50,8 @@ import com.rteats.calendarik.data.Authors
 import com.rteats.calendarik.data.CalendarDatabase
 import com.rteats.calendarik.data.CalendarEvent
 import com.rteats.calendarik.data.DailyReaction
+import com.rteats.calendarik.sync.PairManager
+import com.rteats.calendarik.sync.CloudSync
 import com.rteats.calendarik.ui.MoodCatalog
 import java.time.Instant
 import java.time.LocalDate
@@ -80,6 +82,8 @@ private fun ColorProvider(color: Color): androidx.glance.unit.ColorProvider =
 
 private val offsetKey = intPreferencesKey("dayOffset")
 private val directionKey = ActionParameters.Key<Int>("direction")
+private val ratingKey = ActionParameters.Key<Int>("rating")
+private val dayKey = ActionParameters.Key<Long>("dateEpochDay")
 private val ink = Color(0xFF302758)
 private val softText = Color(0xFF756898)
 private val violet = Color(0xFF8164C9)
@@ -123,8 +127,8 @@ private fun AgendaContent(
     val size = LocalSize.current
     val compact = size.height < 165.dp
     val maxEvents = when {
-        size.height < 165.dp -> 1
-        size.height < 225.dp -> 2
+        size.height < 200.dp -> 1
+        size.height < 290.dp -> 2
         else -> 4
     }
     Column(
@@ -156,30 +160,32 @@ private fun AgendaContent(
         Spacer(GlanceModifier.height(8.dp))
         Row(
             modifier = GlanceModifier.fillMaxWidth()
-                .background(rose).cornerRadius(15.dp).padding(7.dp)
-                .clickable(actionStartActivity(WidgetNavigation.intent(context, day))),
+                .background(rose).cornerRadius(15.dp).padding(5.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            if (rating in 1..5) {
-                Box(GlanceModifier.size(30.dp), contentAlignment = Alignment.Center) {
+            (1..5).forEach { level ->
+                Box(
+                    modifier = GlanceModifier.defaultWeight().height(32.dp)
+                        .clickable(actionRunCallback<SetWidgetHeart>(
+                            actionParametersOf(
+                                ratingKey to level,
+                                dayKey to day.toEpochDay(),
+                            ))),
+                    contentAlignment = Alignment.Center,
+                ) {
                     Image(
                         provider = ImageProvider(R.drawable.fa_heart),
-                        contentDescription = "Сердечко $rating из 5",
-                        colorFilter = androidx.glance.ColorFilter.tint(ColorProvider(pink)),
+                        contentDescription = "Поставить сердечко $level из 5",
+                        colorFilter = androidx.glance.ColorFilter.tint(
+                            ColorProvider(if (rating == level) pink else Color(0xFFF1C9E3))),
                         modifier = GlanceModifier.size(30.dp),
                     )
-                    Text(rating.toString(), style = TextStyle(
-                        color = ColorProvider(Color.White),
+                    Text(level.toString(), style = TextStyle(
+                        color = ColorProvider(if (rating == level) Color.White else softText),
                         fontSize = 12.sp, fontWeight = FontWeight.Bold,
                     ))
                 }
-            } else {
-                Text("♡", style = TextStyle(color = ColorProvider(pink), fontSize = 21.sp))
             }
-            Spacer(GlanceModifier.width(8.dp))
-            Text(if (rating in 1..5) "Наше сердечко · $rating/5" else "Выбрать сердечко",
-                maxLines = 1,
-                style = TextStyle(color = ColorProvider(ink), fontSize = 12.sp))
         }
         if (!compact) {
             Spacer(GlanceModifier.height(8.dp))
@@ -239,6 +245,28 @@ private fun AgendaContent(
                     style = TextStyle(color = ColorProvider(violet), fontSize = 11.sp))
             }
         }
+    }
+}
+
+/** One tap in the widget updates the same shared Room row as the full application. */
+class SetWidgetHeart : ActionCallback {
+    override suspend fun onAction(
+        context: Context,
+        glanceId: GlanceId,
+        parameters: ActionParameters,
+    ) {
+        val level = parameters[ratingKey] ?: return
+        val day = parameters[dayKey] ?: return
+        if (level !in 1..5) return
+        val pairedRole = PairManager(context).current()?.role
+        val stored = context.getSharedPreferences("calendarik_preferences", 0)
+            .getInt("identity", Authors.SASHA)
+        val author = pairedRole ?: if (stored == Authors.NASTYA) Authors.NASTYA else Authors.SASHA
+        val dao = CalendarDatabase.get(context).sharedHearts()
+        val current = dao.get(day)?.heartChoice ?: 0
+        dao.setHeart(day, author, if (current == level) null else level)
+        refreshWidgets(context)
+        CloudSync.requestSoon(context)
     }
 }
 
