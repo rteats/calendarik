@@ -14,6 +14,9 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -21,6 +24,12 @@ import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.Today
 import androidx.compose.material.icons.filled.ViewAgenda
 import androidx.compose.material.icons.filled.ViewWeek
+import androidx.compose.material.icons.filled.AccountCircle
+import androidx.compose.material3.DrawerState
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.ModalDrawerSheet
+import androidx.compose.material3.ModalNavigationDrawer
+import androidx.compose.material3.NavigationDrawerItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -94,10 +103,76 @@ internal fun LavenderPanel(modifier: Modifier = Modifier, content: @Composable (
     Surface(
         modifier = modifier,
         shape = RoundedCornerShape(32.dp),
-        color = Color.White.copy(alpha = .82f),
+        // Opaque fill keeps the elevation shadow and backdrop from showing inside the panel.
+        color = Color(0xFFF4F2FC),
         border = androidx.compose.foundation.BorderStroke(1.dp, Color.White.copy(alpha = .70f)),
         shadowElevation = 3.dp,
     ) { content() }
+}
+
+private val calendarDestinations = listOf(
+    Triple(CalendarView.MONTH, Icons.Default.DateRange, "Месяц"),
+    Triple(CalendarView.WEEK, Icons.Default.ViewWeek, "Неделя"),
+    Triple(CalendarView.DAY, Icons.Default.Today, "День"),
+    Triple(CalendarView.AGENDA, Icons.Default.ViewAgenda, "Список"),
+)
+
+@Composable
+internal fun CalendarNavigationDrawer(
+    state: DrawerState,
+    view: CalendarView,
+    accountStatus: String,
+    accountLabel: String,
+    onView: (CalendarView) -> Unit,
+    onToday: () -> Unit,
+    onAccount: () -> Unit,
+    content: @Composable () -> Unit,
+) {
+    ModalNavigationDrawer(
+        drawerState = state,
+        // Keep horizontal calendar scrolling available when the drawer is closed.
+        gesturesEnabled = state.isOpen,
+        drawerContent = {
+            ModalDrawerSheet(
+                modifier = Modifier.widthIn(max = 320.dp),
+                drawerContainerColor = Color(0xFFF4F2FC),
+            ) {
+                Column(
+                    modifier = Modifier.verticalScroll(rememberScrollState()).padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                ) {
+                    Text("Саша и Настя", style = MaterialTheme.typography.headlineSmall,
+                        color = LavenderUi.ink, modifier = Modifier.padding(12.dp))
+                    Text("Календарь", style = MaterialTheme.typography.labelLarge,
+                        color = LavenderUi.muted, modifier = Modifier.padding(12.dp))
+                    calendarDestinations.forEach { (destination, icon, label) ->
+                        NavigationDrawerItem(
+                            selected = view == destination,
+                            onClick = { onView(destination) },
+                            icon = { Icon(icon, contentDescription = null) },
+                            label = { Text(label) },
+                        )
+                    }
+                    HorizontalDivider(Modifier.padding(vertical = 12.dp), color = LavenderUi.line)
+                    NavigationDrawerItem(
+                        selected = false,
+                        onClick = onToday,
+                        icon = { Icon(Icons.Default.Today, contentDescription = null) },
+                        label = { Text("Сегодня") },
+                    )
+                    NavigationDrawerItem(
+                        selected = false,
+                        onClick = onAccount,
+                        icon = { Icon(Icons.Default.AccountCircle, contentDescription = null) },
+                        label = { Text(accountLabel) },
+                    )
+                    Text(accountStatus, style = MaterialTheme.typography.bodySmall,
+                        color = LavenderUi.muted, modifier = Modifier.padding(12.dp))
+                }
+            }
+        },
+        content = content,
+    )
 }
 
 @Composable
@@ -105,12 +180,7 @@ internal fun LavenderBottomNavigation(
     view: CalendarView,
     onChange: (CalendarView) -> Unit,
 ) {
-    val destinations = listOf(
-        Triple(CalendarView.MONTH, Icons.Default.DateRange, "Месяц"),
-        Triple(CalendarView.WEEK, Icons.Default.ViewWeek, "Неделя"),
-        Triple(CalendarView.DAY, Icons.Default.Today, "День"),
-        Triple(CalendarView.AGENDA, Icons.Default.ViewAgenda, "Список"),
-    )
+    val destinations = calendarDestinations
     Row(
         modifier = Modifier
             .fillMaxWidth()
