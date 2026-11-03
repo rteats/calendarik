@@ -76,7 +76,6 @@ import com.rteats.calendarik.diagnostics.NetworkDiagnostics
 import com.rteats.calendarik.data.Authors
 import com.rteats.calendarik.data.CalendarDatabase
 import com.rteats.calendarik.data.CalendarEvent
-import com.rteats.calendarik.data.HeartColor
 import com.rteats.calendarik.data.SyncEditRepository
 import com.rteats.calendarik.data.SyncConflict
 import com.rteats.calendarik.data.createOrEditEvent
@@ -364,10 +363,10 @@ private fun CalendarikScreen() {
                 }.onFailure { updateText = "Ошибка проверки: " + (it.message ?: "нет соединения") }
         }
     }
-    fun addHeart(color: HeartColor?) {
+    fun addHeart(rating: Int?) {
         scope.launch {
             runCatching {
-                editRepository.heart(selectedDay.toEpochDay(), activeIdentity, color)
+                editRepository.heart(selectedDay.toEpochDay(), activeIdentity, rating)
                 refreshWidgets(context)
                 syncNow()
             }.onFailure { error = it.message ?: "Не удалось сохранить сердечко" }

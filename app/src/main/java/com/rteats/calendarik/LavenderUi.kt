@@ -185,7 +185,7 @@ internal fun LavenderWeekStrip(
             val date = monday.plusDays(offset.toLong())
             val selected = date == day
             val heart = hearts.firstOrNull { it.dateEpochDay == date.toEpochDay() }
-            val color = com.rteats.calendarik.data.HeartColor.fromPersisted(heart?.heartChoice ?: 0)
+            val rating = heart?.heartChoice ?: 0
             Column(
                 modifier = Modifier
                     .weight(1f)
@@ -221,7 +221,7 @@ internal fun LavenderWeekStrip(
                     )
                 }
                 Box(Modifier.size(14.dp), contentAlignment = Alignment.Center) {
-                    if (color != null) HeartGlyph(color, Modifier.size(12.dp))
+                    if (rating in 1..5) HeartGlyph(rating, Modifier.size(16.dp), 8.sp)
                 }
             }
         }
