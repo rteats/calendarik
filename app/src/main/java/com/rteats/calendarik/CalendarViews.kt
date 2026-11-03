@@ -289,18 +289,36 @@ internal fun CalendarWeekView(
                                 }
                             }
                         }
-                        events.filter { eventDay(it) == date }.forEach { event ->
-                            // Include all hours, including early morning and late night.
+                        // Assign side-by-side lanes so simultaneous personal events do not cover each other.
+                        val timed = events.filter { eventDay(it) == date }.sortedBy { it.startsAtMillis }
+                        val laneEndTimes = mutableListOf<Long>()
+                        val positions = timed.map { event ->
+                            val free = laneEndTimes.indexOfFirst { it <= event.startsAtMillis }
+                            val lane = if (free == -1) {
+                                laneEndTimes.add(event.endsAtMillis)
+                                laneEndTimes.lastIndex
+                            } else {
+                                laneEndTimes[free] = event.endsAtMillis
+                                free
+                            }
+                            event to lane
+                        }
+                        positions.forEach { (event, lane) ->
                             val start = eventStartMinute(event).coerceIn(0, 24 * 60)
                             val end = eventEndMinute(event).coerceIn(0, 24 * 60)
                             if (end > start) {
                                 val position = start * 62f / 60f
                                 val duration = ((end - start) * 62f / 60f).coerceAtLeast(30f)
                                 val accent = eventColor(event.authorMask)
+                                val overlap = timed.count { other ->
+                                    event.startsAtMillis < other.endsAtMillis && event.endsAtMillis > other.startsAtMillis
+                                }
+                                val columns = maxOf(overlap, lane + 1)
+                                val width = (cellWidth - 4.dp) / columns
                                 Column(
                                     modifier = Modifier
-                                        .offset(y = position.dp)
-                                        .fillMaxWidth()
+                                        .offset(x = width * lane, y = position.dp)
+                                        .width(width)
                                         .height(duration.dp)
                                         .background(accent.copy(alpha = 0.24f), RoundedCornerShape(10.dp))
                                         .border(1.dp, accent.copy(alpha = 0.55f), RoundedCornerShape(10.dp))
