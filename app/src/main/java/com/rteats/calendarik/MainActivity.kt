@@ -147,7 +147,7 @@ private fun CalendarikScreen() {
             else Authors.SASHA
         )
     }
-    var profileNotSelected by remember { mutableStateOf(!prefs.contains("identity")) }
+    var profileNotSelected by remember { mutableStateOf(!prefs.contains("identity") && accountUid == null && paired == null) }
     val activeIdentity = paired?.role ?: identity
     // Authentication is the source of identity once a pair is established.
     // Keep the local profile selector exclusively for offline/demo use.
@@ -604,6 +604,11 @@ private fun CalendarikScreen() {
             onPairChanged = { updated ->
                 paired = updated
                 accountUid = pairManager.auth.currentUser?.uid
+                if (updated != null) {
+                    // Preserve role across the next launch; avoid demo profile onboarding after pairing.
+                    prefs.edit().putInt("identity", updated.role).apply()
+                    profileNotSelected = false
+                }
                 if (updated?.active == true) syncNow()
             },
         )
