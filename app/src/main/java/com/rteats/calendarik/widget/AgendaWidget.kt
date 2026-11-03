@@ -1,6 +1,7 @@
 package com.rteats.calendarik.widget
 
 import android.content.Context
+import android.content.Intent
 import androidx.glance.GlanceId
 import androidx.glance.GlanceModifier
 import androidx.glance.action.clickable
@@ -39,7 +40,7 @@ class AgendaWidget : GlanceAppWidget() {
                 "  " + item.title + " · " + Authors.label(item.authorMask)
         }
         provideContent {
-            Column(modifier = GlanceModifier.fillMaxSize().padding(12.dp).clickable(actionStartActivity<MainActivity>())) {
+            Column(modifier = GlanceModifier.fillMaxSize().padding(12.dp).clickable(actionStartActivity(Intent(context, MainActivity::class.java)))) {
                 Text("Календарик · Сегодня", style = TextStyle(fontSize = 16.sp))
                 Spacer(GlanceModifier.height(8.dp))
                 if (lines.isEmpty()) {
