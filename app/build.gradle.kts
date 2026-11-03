@@ -7,6 +7,9 @@ plugins {
 
 val buildCode = providers.gradleProperty("VERSION_CODE").orNull?.toIntOrNull() ?: 1
 val buildName = providers.gradleProperty("VERSION_NAME").orNull ?: "0.1.0-dev"
+// As in MPEI Lite, CI opts into R8 for the production APK only.
+// Keep normal debug builds fast and easy to inspect.
+val optimizeRelease = providers.gradleProperty("OPTIMIZE_RELEASE").orNull == "true"
 val releaseKeystorePath = providers.environmentVariable("CALENDARIK_KEYSTORE_FILE").orNull
 val releaseStorePassword = providers.environmentVariable("CALENDARIK_STORE_PASSWORD").orNull
 val releaseKeyAlias = providers.environmentVariable("CALENDARIK_KEY_ALIAS").orNull
@@ -44,7 +47,12 @@ android {
             versionNameSuffix = "-debug"
         }
         release {
-            isMinifyEnabled = false
+            isMinifyEnabled = optimizeRelease
+            isShrinkResources = optimizeRelease
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro",
+            )
             if (signingReady) signingConfig = signingConfigs.getByName("rolling")
         }
     }
