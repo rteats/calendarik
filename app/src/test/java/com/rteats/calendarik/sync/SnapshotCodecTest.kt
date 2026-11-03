@@ -14,12 +14,18 @@ class SnapshotCodecTest {
         val original = CalendarSnapshot(
             listOf(event.copy(deleted = true)),
             listOf(DailyReaction(42, 2, redHearts = 123, dayEmoji = "fa:poo-storm", revision = 9)),
-            listOf(SharedHeart(42, 2, 12, 1, 999)),
+            listOf(SharedHeart(42, 5, 12, 1, 999)),
         )
         val restored = SnapshotCodec.decode(SnapshotCodec.encode(original))
         assertEquals(original.events, restored.events)
         assertEquals(original.reactions, restored.reactions)
         assertEquals(original.sharedHearts, restored.sharedHearts)
+    }
+
+    @Test fun allFiveRatingsRoundTrip() {
+        val source = CalendarSnapshot(emptyList(), emptyList(),
+            (1..5).map { SharedHeart(it.toLong(), it, it.toLong(), 1, 100) })
+        assertEquals(source.sharedHearts, SnapshotCodec.decode(SnapshotCodec.encode(source)).sharedHearts)
     }
 
     @Test fun rejectsUnknownPayloadVersions() {

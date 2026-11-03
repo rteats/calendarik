@@ -1,6 +1,10 @@
 package com.rteats.calendarik.ui
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -9,44 +13,39 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.rteats.calendarik.data.Authors
 import com.rteats.calendarik.data.DailyReaction
-import com.rteats.calendarik.data.HeartColor
 import com.rteats.calendarik.data.SharedHeart
 
-/** A single heart for the couple; private moods remain independently editable. */
 @Composable
 fun DayReactionsPanel(
     reactions: List<DailyReaction>,
     sharedHeart: SharedHeart?,
     actingAs: Int,
-    onHeart: (HeartColor?) -> Unit,
+    onHeart: (Int?) -> Unit,
     onMood: (String?) -> Unit,
 ) {
-    val context = LocalContext.current
-    val history = remember(context) { RecentEmojiStore(context) }
-    var recent by remember(actingAs) { mutableStateOf(history.read(actingAs)) }
     var pickerOpen by remember { mutableStateOf(false) }
-    val choice = HeartColor.fromPersisted(sharedHeart?.heartChoice ?: 0)
+    val rating = sharedHeart?.heartChoice ?: 0
 
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Card(
@@ -55,32 +54,39 @@ fun DayReactionsPanel(
         ) {
             Column(
                 modifier = Modifier.fillMaxWidth().padding(14.dp),
-                verticalArrangement = Arrangement.spacedBy(7.dp),
+                verticalArrangement = Arrangement.spacedBy(9.dp),
             ) {
-                Text("Общее сердечко", style = MaterialTheme.typography.titleMedium,
+                Text("Наше сердечко", style = MaterialTheme.typography.titleMedium,
                     color = Color(0xFF48345F), fontWeight = FontWeight.Bold)
-                Text("Одно на день для Саши и Насти. Любой из вас может изменить его.",
+                Text("Общая оценка дня. Саша и Настя могут её изменить.",
                     style = MaterialTheme.typography.bodySmall, color = Color(0xFF736282))
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(9.dp),
+                    horizontalArrangement = Arrangement.SpaceEvenly,
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    listOf(HeartColor.RED, HeartColor.PINK).forEach { color ->
-                        FilterChip(
-                            selected = choice == color,
-                            onClick = { onHeart(if (choice == color) null else color) },
-                            label = {
-                                Row(horizontalArrangement = Arrangement.spacedBy(6.dp),
-                                    verticalAlignment = Alignment.CenterVertically) {
-                                    HeartGlyph(color, Modifier.size(18.dp))
-                                    Text(if (color == HeartColor.RED) "Красное" else "Розовое")
-                                }
-                            },
-                        )
+                    (1..5).forEach { value ->
+                        Box(
+                            modifier = Modifier
+                                .size(52.dp)
+                                .border(
+                                    if (rating == value) 2.dp else 0.dp,
+                                    if (rating == value) Color(0xFFE68BC7) else Color.Transparent,
+                                    RoundedCornerShape(15.dp),
+                                )
+                                .background(
+                                    if (rating == value) Color.White.copy(alpha = .85f)
+                                    else Color.Transparent,
+                                    RoundedCornerShape(15.dp),
+                                )
+                                .clickable { onHeart(if (rating == value) null else value) },
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            HeartGlyph(value, Modifier.size(35.dp), 15.sp)
+                        }
                     }
                 }
-                if (choice != null) {
+                if (rating > 0) {
                     TextButton(onClick = { onHeart(null) }) { Text("Убрать сердечко") }
                 }
             }
@@ -105,14 +111,19 @@ fun DayReactionsPanel(
                     ) {
                         Text(Authors.label(author), fontWeight = FontWeight.SemiBold,
                             style = MaterialTheme.typography.titleSmall)
-                        MoodGlyph(reaction?.dayEmoji ?: "fa:face-smile", Modifier.size(28.dp),
-                            if (author == Authors.SASHA) Color(0xFF6979B8) else Color(0xFFBA6BA7))
+                        if (reaction?.dayEmoji != null) {
+                            MoodGlyph(reaction.dayEmoji, Modifier.size(28.dp),
+                                if (author == Authors.SASHA) Color(0xFF6979B8) else Color(0xFFBA6BA7))
+                        } else {
+                            Text("—", style = MaterialTheme.typography.titleLarge)
+                        }
                         if (mine) {
                             TextButton(onClick = { pickerOpen = true }) { Text("Выбрать") }
                         } else {
                             Text(if (reaction?.dayEmoji == null) "Нет эмоции" else
                                 MoodCatalog.label(reaction.dayEmoji),
-                                style = MaterialTheme.typography.labelSmall, maxLines = 1)
+                                style = MaterialTheme.typography.labelSmall, maxLines = 2,
+                                textAlign = TextAlign.Center)
                         }
                     }
                 }
@@ -121,44 +132,41 @@ fun DayReactionsPanel(
     }
 
     if (pickerOpen) {
-        fun choose(id: String) {
-            recent = history.record(actingAs, id)
-            onMood(id)
-            pickerOpen = false
-        }
-        @Composable
-        fun pickerRow(ids: List<String>) {
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(2.dp)) {
-                ids.forEach { id ->
-                    TextButton(
-                        onClick = { choose(id) },
-                        modifier = Modifier.weight(1f),
-                    ) {
-                        Column(horizontalAlignment = Alignment.CenterHorizontally,
-                            verticalArrangement = Arrangement.spacedBy(5.dp)) {
-                            MoodGlyph(id, Modifier.size(25.dp))
-                            Text(MoodCatalog.label(id), fontSize = 9.sp, maxLines = 1)
-                        }
-                    }
-                }
-            }
-        }
         AlertDialog(
             onDismissRequest = { pickerOpen = false },
             title = { Text("Эмоция за день") },
             text = {
                 Column(
-                    modifier = Modifier.fillMaxWidth().heightIn(max = 400.dp)
+                    modifier = Modifier.fillMaxWidth().heightIn(max = 410.dp)
                         .verticalScroll(rememberScrollState()),
-                    verticalArrangement = Arrangement.spacedBy(7.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp),
                 ) {
-                    if (recent.isNotEmpty()) {
-                        Text("Недавние", style = MaterialTheme.typography.titleSmall)
-                        recent.chunked(4).forEach { pickerRow(it) }
-                    }
-                    MoodCatalog.categories.forEach { (section, options) ->
-                        Text(section, style = MaterialTheme.typography.titleSmall)
-                        options.chunked(4).forEach { row -> pickerRow(row.map { it.id }) }
+                    MoodCatalog.choices.chunked(4).forEach { group ->
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(4.dp),
+                        ) {
+                            group.forEach { mood ->
+                                Column(
+                                    modifier = Modifier.weight(1f)
+                                        .clickable { onMood(mood.id); pickerOpen = false }
+                                        .padding(vertical = 8.dp, horizontal = 1.dp),
+                                    horizontalAlignment = Alignment.CenterHorizontally,
+                                    verticalArrangement = Arrangement.spacedBy(6.dp),
+                                ) {
+                                    MoodGlyph(mood.id, Modifier.size(31.dp))
+                                    Text(
+                                        mood.label,
+                                        style = MaterialTheme.typography.labelSmall,
+                                        fontSize = 10.sp,
+                                        lineHeight = 12.sp,
+                                        textAlign = TextAlign.Center,
+                                        maxLines = 2,
+                                        minLines = 2,
+                                    )
+                                }
+                            }
+                        }
                     }
                 }
             },

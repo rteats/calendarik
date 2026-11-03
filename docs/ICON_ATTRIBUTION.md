@@ -1,6 +1,6 @@
 # Font Awesome Free reaction icons
 
-The reaction symbols, including `poo` and `poo-storm`, are derived from
+The reaction symbols, including the faceless `poop` and `poo-storm`, are derived from
 [Font Awesome Free 7.3.1](https://fontawesome.com/), copyright 2026 Fonticons, Inc.
 
 - Icons: [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/)

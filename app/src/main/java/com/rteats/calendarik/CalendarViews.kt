@@ -53,7 +53,6 @@ import androidx.compose.ui.unit.sp
 import com.rteats.calendarik.data.Authors
 import com.rteats.calendarik.data.CalendarEvent
 import com.rteats.calendarik.data.DailyReaction
-import com.rteats.calendarik.data.HeartColor
 import com.rteats.calendarik.data.SharedHeart
 import com.rteats.calendarik.ui.HeartGlyph
 import com.rteats.calendarik.ui.DayReactionsPanel
@@ -232,7 +231,7 @@ internal fun CalendarDayView(
     identity: Int,
     onDate: (LocalDate) -> Unit,
     onOpen: (CalendarEvent) -> Unit,
-    onHeart: (HeartColor?) -> Unit,
+    onHeart: (Int?) -> Unit,
     onMood: (String?) -> Unit,
 ) {
     val dayEvents = events.filter { eventDay(it) == selectedDay }.sortedBy { it.startsAtMillis }
@@ -435,7 +434,7 @@ internal fun CalendarMonthView(
     identity: Int,
     onDate: (LocalDate) -> Unit,
     onOpen: (CalendarEvent) -> Unit,
-    onHeart: (HeartColor?) -> Unit,
+    onHeart: (Int?) -> Unit,
     onMood: (String?) -> Unit,
 ) {
     // Events, shared hearts and personal moods are separate calendar layers.
@@ -538,8 +537,8 @@ internal fun CalendarMonthView(
                                     }
                                 } else {
                                     val heart = sharedHearts.firstOrNull { it.dateEpochDay == date.toEpochDay() }
-                                    val color = HeartColor.fromPersisted(heart?.heartChoice ?: 0)
-                                    if (color != null) HeartGlyph(color, Modifier.size(17.dp))
+                                    val rating = heart?.heartChoice ?: 0
+                                    if (rating in 1..5) HeartGlyph(rating, Modifier.size(21.dp), 9.sp)
                                 }
                             }
                         }

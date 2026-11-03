@@ -25,6 +25,18 @@ class SharedHeartRulesTest {
         assertFalse(SharedHeartRules.shouldAccept(cleared, current))
     }
 
+    @Test fun acceptsOnlyRatingsZeroThroughFive() {
+        for (rating in 0..5) assertTrue(SharedHeartRules.validRating(rating))
+        assertFalse(SharedHeartRules.validRating(-1))
+        assertFalse(SharedHeartRules.validRating(6))
+    }
+
+    @Test fun highestRatingWinsWhenRevisionIsHigher() {
+        val old = SharedHeart(42, 1, 3, Authors.SASHA, 100)
+        val latest = SharedHeart(42, 5, 4, Authors.NASTYA, 150)
+        assertTrue(SharedHeartRules.shouldAccept(old, latest))
+    }
+
     @Test fun replayIsIdempotent() {
         val same = SharedHeart(42, 2, 7, Authors.SASHA, 100)
         assertFalse(SharedHeartRules.shouldAccept(same, same))

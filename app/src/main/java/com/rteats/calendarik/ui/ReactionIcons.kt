@@ -4,12 +4,12 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.sp
 import com.rteats.calendarik.R
-import com.rteats.calendarik.data.HeartColor
 
 /** Stable reaction IDs keep emoji fonts and Android versions out of the UI. */
 internal data class MoodChoice(val name: String, val label: String) {
@@ -17,75 +17,31 @@ internal data class MoodChoice(val name: String, val label: String) {
 }
 
 internal object MoodCatalog {
-    val categories: List<Pair<String, List<MoodChoice>>> = listOf(
-        "Счастье" to listOf(
-            MoodChoice("face-smile", "Улыбка"),
-            MoodChoice("face-smile-beam", "Сияние"),
-            MoodChoice("face-grin", "Радость"),
-            MoodChoice("face-grin-wide", "Смех"),
-            MoodChoice("face-grin-hearts", "Влюблён"),
-            MoodChoice("face-laugh", "Весело"),
-            MoodChoice("face-laugh-squint", "Хохот"),
-            MoodChoice("face-grin-squint-tears", "До слёз"),
-            MoodChoice("face-grin-tears", "Слёзы смеха"),
-            MoodChoice("face-grin-stars", "Восторг"),
-            MoodChoice("face-kiss", "Поцелуй"),
-            MoodChoice("face-kiss-beam", "Нежность"),
-            MoodChoice("face-grin-wink", "Подмигнуть"),
-            MoodChoice("face-smile-wink", "Хитринка"),
-        ),
-        "Настроение" to listOf(
-            MoodChoice("face-meh", "Нейтрально"),
-            MoodChoice("face-meh-blank", "Без эмоций"),
-            MoodChoice("face-sad-tear", "Грустно"),
-            MoodChoice("face-sad-cry", "Плачу"),
-            MoodChoice("face-frown", "Уныло"),
-            MoodChoice("face-frown-open", "Печаль"),
-            MoodChoice("face-angry", "Злость"),
-            MoodChoice("face-flushed", "Смущение"),
-            MoodChoice("face-tired", "Усталость"),
-            MoodChoice("face-dizzy", "Головокружение"),
-            MoodChoice("face-surprise", "Удивление"),
-            MoodChoice("face-grimace", "Неловко"),
-            MoodChoice("face-rolling-eyes", "Закатил глаза"),
-            MoodChoice("face-grin-beam-sweat", "Нервничаю"),
-            MoodChoice("face-grin-beam", "Доволен"),
-        ),
-        "Шутки" to listOf(
-            MoodChoice("poo", "Какашка"),
-            MoodChoice("poo-storm", "Какашка-буря"),
-            MoodChoice("ghost", "Призрак"),
-            MoodChoice("robot", "Робот"),
-            MoodChoice("skull", "Череп"),
-            MoodChoice("masks-theater", "Театр"),
-            MoodChoice("cat", "Кот"),
-            MoodChoice("bug", "Жучок"),
-            MoodChoice("face-grin-tongue", "Дразнюсь"),
-            MoodChoice("face-grin-tongue-wink", "Подмигну"),
-            MoodChoice("face-grin-tongue-squint", "Безумие"),
-        ),
-        "Символы" to listOf(
-            MoodChoice("heart", "Сердце"),
-            MoodChoice("heart-crack", "Разбитое"),
-            MoodChoice("heart-pulse", "Пульс"),
-            MoodChoice("fire", "Огонь"),
-            MoodChoice("star", "Звезда"),
-            MoodChoice("star-of-life", "Знак"),
-            MoodChoice("moon", "Луна"),
-            MoodChoice("sun", "Солнце"),
-            MoodChoice("cloud", "Облако"),
-            MoodChoice("cloud-rain", "Дождь"),
-            MoodChoice("snowflake", "Снежинка"),
-            MoodChoice("clover", "Клевер"),
-            MoodChoice("rainbow", "Радуга"),
-            MoodChoice("seedling", "Росток"),
-            MoodChoice("gift", "Подарок"),
-            MoodChoice("bolt", "Молния"),
-            MoodChoice("music", "Музыка"),
-            MoodChoice("champagne-glasses", "Праздник"),
-        ),
+    val choices: List<MoodChoice> = listOf(
+        MoodChoice("face-smile", "Улыбка"),
+        MoodChoice("face-grin", "Радость"),
+        MoodChoice("face-grin-hearts", "Влюблён"),
+        MoodChoice("face-laugh", "Весело"),
+        MoodChoice("face-grin-stars", "Восторг"),
+        MoodChoice("face-meh", "Нейтрально"),
+        MoodChoice("face-meh-blank", "Без эмоций"),
+        MoodChoice("face-sad-tear", "Грустно"),
+        MoodChoice("face-sad-cry", "Плачу"),
+        MoodChoice("face-frown", "Уныло"),
+        MoodChoice("face-angry", "Злость"),
+        MoodChoice("face-tired", "Усталость"),
+        MoodChoice("face-dizzy", "Головокружение"),
+        MoodChoice("face-rolling-eyes", "Закатил глаза"),
+        MoodChoice("poop", "Какашка"),
+        MoodChoice("poo-storm", "Какашка-буря"),
+        MoodChoice("skull", "Череп"),
+        MoodChoice("heart", "Сердце"),
+        MoodChoice("heart-crack", "Разбитое"),
+        MoodChoice("fire", "Огонь"),
+        MoodChoice("gift", "Подарок"),
+        MoodChoice("champagne-glasses", "Праздник"),
     )
-    val byId: Map<String, MoodChoice> = categories.flatMap { it.second }.associateBy { it.id }
+    val byId: Map<String, MoodChoice> = choices.associateBy { it.id }
     fun label(id: String): String = byId[id]?.label ?: id
 
     fun resource(id: String?): Int? = when (id?.removePrefix("fa:")) {
@@ -118,7 +74,8 @@ internal object MoodCatalog {
         "face-rolling-eyes" -> R.drawable.fa_face_rolling_eyes
         "face-grin-beam-sweat" -> R.drawable.fa_face_grin_beam_sweat
         "face-grin-beam" -> R.drawable.fa_face_grin_beam
-        "poo" -> R.drawable.fa_poo
+        "poop" -> R.drawable.fa_poop
+        "poo" -> R.drawable.fa_poop // Legacy value uses the faceless icon
         "poo-storm" -> R.drawable.fa_poo_storm
         "ghost" -> R.drawable.fa_ghost
         "robot" -> R.drawable.fa_robot
@@ -172,20 +129,31 @@ internal fun MoodGlyph(
     }
 }
 
+/** A single shared pink heart with a clear number from 1 to 5. */
 @Composable
-internal fun HeartGlyph(color: HeartColor?, modifier: Modifier = Modifier) {
-    Icon(
-        painter = painterResource(R.drawable.fa_heart),
-        contentDescription = when (color) {
-            HeartColor.RED -> "Красное сердечко"
-            HeartColor.PINK -> "Розовое сердечко"
-            null -> "Нет сердечка"
-        },
+internal fun HeartGlyph(
+    rating: Int,
+    modifier: Modifier = Modifier,
+    numberSize: androidx.compose.ui.unit.TextUnit = 12.sp,
+) {
+    require(rating in 1..5)
+    androidx.compose.foundation.layout.Box(
         modifier = modifier,
-        tint = when (color) {
-            HeartColor.RED -> Color(0xFFE34D68)
-            HeartColor.PINK -> Color(0xFFE28FC4)
-            null -> Color(0xFFBDB1C9)
-        },
-    )
+        contentAlignment = androidx.compose.ui.Alignment.Center,
+    ) {
+        Icon(
+            painter = painterResource(R.drawable.fa_heart),
+            contentDescription = "Сердечко $rating из 5",
+            modifier = Modifier.fillMaxSize(),
+            tint = Color(0xFFE68BC7),
+        )
+        Text(
+            rating.toString(),
+            fontSize = numberSize,
+            color = Color.White,
+            fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
+            textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+            maxLines = 1,
+        )
+    }
 }

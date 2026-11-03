@@ -89,7 +89,7 @@ object SnapshotCodec {
 
     fun heartFromJson(j: JSONObject): SharedHeart = SharedHeart(
         dateEpochDay = j.getLong("dateEpochDay"),
-        heartChoice = j.getInt("heartChoice").also { require(it in 0..2) },
+        heartChoice = j.getInt("heartChoice").also { require(it in 0..5) },
         revision = j.getLong("revision").also { require(it >= 1) },
         lastEditor = j.getInt("lastEditor").also { require(it in 1..2) },
         updatedAtMillis = j.getLong("updatedAtMillis"),
