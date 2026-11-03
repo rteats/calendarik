@@ -29,13 +29,11 @@ import androidx.glance.action.ActionParameters
 import androidx.glance.action.actionParametersOf
 import androidx.glance.action.clickable
 import androidx.glance.background
-import androidx.glance.color.ColorProvider
 import androidx.glance.layout.Alignment
 import androidx.glance.layout.Box
 import androidx.glance.layout.Column
 import androidx.glance.layout.Row
 import androidx.glance.layout.Spacer
-import androidx.glance.layout.defaultWeight
 import androidx.glance.layout.fillMaxSize
 import androidx.glance.layout.fillMaxWidth
 import androidx.glance.layout.height
@@ -75,6 +73,10 @@ object WidgetNavigation {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
         }
 }
+
+// Glance requires both day and night values even for an intentionally fixed pastel widget palette.
+private fun ColorProvider(color: Color): androidx.glance.unit.ColorProvider =
+    androidx.glance.color.ColorProvider(color, color)
 
 private val offsetKey = intPreferencesKey("dayOffset")
 private val directionKey = ActionParameters.Key<Int>("direction")
