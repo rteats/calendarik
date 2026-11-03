@@ -1,6 +1,8 @@
 package com.rteats.calendarik.sync
 
 import android.content.Context
+import android.os.SystemClock
+import com.rteats.calendarik.diagnostics.NetworkDiagnostics
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
@@ -19,21 +21,39 @@ class PairManager(context: Context) {
     val auth: FirebaseAuth = FirebaseAuth.getInstance()
     private val firestore = FirebaseFirestore.getInstance()
     private val vault = PairVault(context)
+    private val diagnostics = NetworkDiagnostics.get(context)
+
+    private suspend fun <T> traced(name: String, block: suspend () -> T): T {
+        val started = SystemClock.elapsedRealtime()
+        diagnostics.log("firebase", name, "start")
+        return try {
+            block().also {
+                diagnostics.log("firebase", name, "ok", SystemClock.elapsedRealtime() - started)
+            }
+        } catch (failure: Exception) {
+            diagnostics.log("firebase", name, "error", SystemClock.elapsedRealtime() - started, failure = failure)
+            throw failure
+        }
+    }
 
     fun current(): LocalPair? = vault.load(auth.currentUser?.uid)
 
-    suspend fun register(email: String, password: String) {
+    suspend fun register(email: String, password: String) = traced("auth_register") {
         require(password.length >= 6)
         auth.createUserWithEmailAndPassword(email.trim(), password).await()
     }
 
-    suspend fun signIn(email: String, password: String) {
+    suspend fun signIn(email: String, password: String) = traced("auth_sign_in") {
         auth.signInWithEmailAndPassword(email.trim(), password).await()
     }
 
-    fun signOut() = auth.signOut()
+    fun signOut() {
+        diagnostics.log("firebase", "auth_sign_out", "start")
+        auth.signOut()
+        diagnostics.log("firebase", "auth_sign_out", "ok")
+    }
 
-    suspend fun create(role: Int): String {
+    suspend fun create(role: Int): String = traced("pair_create") {
         require(role in 1..2)
         val user = requireNotNull(auth.currentUser) { "Сначала войдите в аккаунт" }
         check(current() == null) { "Устройство уже связано с парой" }
@@ -51,7 +71,7 @@ class PairManager(context: Context) {
         ).await()
         val session = LocalPair(user.uid, pairId, user.uid, role, "", key)
         vault.save(session)
-        return PairInvite(pairId, user.uid, role, key).asQrString()
+        PairInvite(pairId, user.uid, role, key).asQrString()
     }
 
     fun invitation(): String {
@@ -60,7 +80,7 @@ class PairManager(context: Context) {
         return PairInvite(pair.pairId, pair.creatorUid, pair.role, pair.key).asQrString()
     }
 
-    suspend fun requestJoin(invitation: String) {
+    suspend fun requestJoin(invitation: String) = traced("pair_request_join") {
         val invite = PairInvite.parse(invitation)
         val user = requireNotNull(auth.currentUser) { "Сначала войдите в аккаунт" }
         check(user.uid != invite.creatorUid) { "Нужен другой аккаунт" }
@@ -86,17 +106,17 @@ class PairManager(context: Context) {
         )
     }
 
-    suspend fun requests(): List<JoinRequest> {
+    suspend fun requests(): List<JoinRequest> = traced("pair_list_requests") {
         val pair = requireNotNull(current())
         check(pair.isCreator)
         val snapshot = firestore.collection("pairs").document(pair.pairId)
             .collection("requests").get(Source.SERVER).await()
-        return snapshot.documents.filter { it.getString("status") == "pending" }.map {
+        snapshot.documents.filter { it.getString("status") == "pending" }.map {
             JoinRequest(it.id, it.getString("requesterEmail") ?: "")
         }
     }
 
-    suspend fun approve(requesterUid: String) {
+    suspend fun approve(requesterUid: String) = traced("pair_approve") {
         val pair = requireNotNull(current())
         check(pair.isCreator && !pair.active)
         val pairRef = firestore.collection("pairs").document(pair.pairId)
@@ -119,21 +139,21 @@ class PairManager(context: Context) {
         vault.markActive(pair.accountUid, requesterUid)
     }
 
-    suspend fun refresh(): LocalPair? {
-        val pair = current() ?: return null
+    suspend fun refresh(): LocalPair? = traced("pair_refresh") {
+        val pair = current() ?: return@traced null
         val uid = requireNotNull(auth.currentUser).uid
-        if (pair.active) return pair
+        if (pair.active) return@traced pair
         if (!pair.isCreator) {
             val req = firestore.collection("pairs").document(pair.pairId)
                 .collection("requests").document(uid).get(Source.SERVER).await()
-            if (req.getString("status") != "accepted") return pair
+            if (req.getString("status") != "accepted") return@traced pair
         }
         val metadata = firestore.collection("pairs").document(pair.pairId).get(Source.SERVER).await()
         val members = (metadata.get("memberUids") as? List<*>)?.filterIsInstance<String>().orEmpty()
         if (metadata.getString("creatorUid") != pair.creatorUid || members.size != 2 ||
-            !members.contains(uid)) return pair
+            !members.contains(uid)) return@traced pair
         val peer = members.first { it != uid }
         vault.markActive(uid, peer)
-        return current()
+        current()
     }
 }

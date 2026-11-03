@@ -50,7 +50,7 @@ class UpgradeV2ToV3Test {
             old.version = 2
         }
         val db = Room.databaseBuilder(context, CalendarDatabase::class.java, name)
-            .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
+            .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
             .build()
         try {
             assertEquals("important", db.events().byId("keep")?.notes)
@@ -59,6 +59,8 @@ class UpgradeV2ToV3Test {
             assertEquals(123456L, db.reactions().get(20395, Authors.SASHA)?.redHearts)
             assertEquals("🥰", db.reactions().get(20395, Authors.SASHA)?.dayEmoji)
             assertEquals("😴", db.reactions().get(20395, Authors.NASTYA)?.dayEmoji)
+            assertEquals(1, db.reactions().get(20395, Authors.SASHA)?.heartChoice)
+            assertEquals(2, db.reactions().get(20395, Authors.NASTYA)?.heartChoice)
             assertEquals(0, db.sync().conflictCount())
         } finally {
             db.close()

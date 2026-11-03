@@ -3,6 +3,8 @@ package com.rteats.calendarik
 import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.background
 import androidx.compose.foundation.horizontalScroll
@@ -65,6 +67,9 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.rteats.calendarik.diagnostics.DiagnosticsArchive
+import com.rteats.calendarik.diagnostics.DiagnosticsExporter
+import com.rteats.calendarik.diagnostics.NetworkDiagnostics
 import com.rteats.calendarik.data.Authors
 import com.rteats.calendarik.data.CalendarDatabase
 import com.rteats.calendarik.data.CalendarEvent
@@ -88,7 +93,9 @@ import java.time.ZoneId
 import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
 import java.util.Locale
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.launch
 
 private val lavender = Color(0xFF7959C4)
@@ -133,6 +140,67 @@ private fun CalendarikScreen() {
     val editRepository = remember { SyncEditRepository(db) }
     val pairManager = remember { PairManager(context) }
     val cloudSync = remember { CloudSync(context) }
+    val networkLog = remember { NetworkDiagnostics.get(context) }
+    var exportingDiagnostics by remember { mutableStateOf(false) }
+    var diagnosticStatus by remember { mutableStateOf("") }
+    var pendingDiagnosticBytes by remember { mutableStateOf<ByteArray?>(null) }
+
+    val createDiagnosticDocument = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument(DiagnosticsExporter.MIME)
+    ) { uri ->
+        val archive = pendingDiagnosticBytes
+        pendingDiagnosticBytes = null
+        if (uri == null || archive == null) {
+            exportingDiagnostics = false
+            diagnosticStatus = "Сохранение отменено"
+        } else {
+            scope.launch {
+                try {
+                    DiagnosticsExporter.savePicked(context, uri, archive)
+                    diagnosticStatus = "ZIP сохранён"
+                    runCatching { DiagnosticsExporter.share(context, uri) }
+                        .onFailure { diagnosticStatus = "ZIP сохранён, но отправку открыть не удалось" }
+                } catch (failure: Exception) {
+                    diagnosticStatus = "Ошибка сохранения: " + failure.javaClass.simpleName
+                } finally {
+                    exportingDiagnostics = false
+                }
+            }
+        }
+    }
+    fun exportDiagnostics() {
+        if (exportingDiagnostics) return
+        exportingDiagnostics = true
+        diagnosticStatus = ""
+        scope.launch {
+            try {
+                val now = Instant.now()
+                val archive = withContext(Dispatchers.IO) {
+                    DiagnosticsArchive.create(
+                        log = networkLog.read(),
+                        versionName = BuildConfig.VERSION_NAME,
+                        versionCode = BuildConfig.VERSION_CODE,
+                        sdk = Build.VERSION.SDK_INT,
+                        instant = now,
+                    )
+                }
+                val filename = DiagnosticsArchive.fileName(now)
+                if (Build.VERSION.SDK_INT >= 29) {
+                    val uri = DiagnosticsExporter.saveToDownloads(context, filename, archive)
+                    diagnosticStatus = "Сохранено в Загрузки/Calendarik/Diagnostics"
+                    exportingDiagnostics = false
+                    runCatching { DiagnosticsExporter.share(context, uri) }
+                        .onFailure { diagnosticStatus = "ZIP сохранён, но отправку открыть не удалось" }
+                } else {
+                    pendingDiagnosticBytes = archive
+                    createDiagnosticDocument.launch(filename)
+                }
+            } catch (failure: Exception) {
+                diagnosticStatus = "Ошибка экспорта: " + failure.javaClass.simpleName
+                exportingDiagnostics = false
+            }
+        }
+    }
     val prefs = remember { context.getSharedPreferences("calendarik_preferences", 0) }
 
     var paired by remember { mutableStateOf(pairManager.current()) }
@@ -155,6 +223,7 @@ private fun CalendarikScreen() {
     DisposableEffect(pairManager) {
         val listener = FirebaseAuth.AuthStateListener { auth ->
             accountUid = auth.currentUser?.uid
+            networkLog.log("firebase", "auth_session", if (accountUid == null) "signed_out" else "signed_in")
             paired = pairManager.current()
         }
         pairManager.auth.addAuthStateListener(listener)
@@ -173,14 +242,17 @@ private fun CalendarikScreen() {
     }
     DisposableEffect(paired?.pairId, paired?.peerUid) {
         val current = paired
+        if (current?.active == true) networkLog.log("firestore", "peer_listener", "start")
         val registration = if (current?.active == true) {
             FirebaseFirestore.getInstance()
                 .collection("pairs").document(current.pairId)
                 .collection("snapshots").document(current.peerUid)
                 .addSnapshotListener { snapshot, failure ->
                     if (failure != null) {
+                        networkLog.log("firestore", "peer_listener", "error", failure = failure)
                         syncStatus = "Ошибка соединения: " + (failure.localizedMessage ?: "нет доступа")
                     } else if (snapshot?.exists() == true) {
+                        networkLog.log("firestore", "peer_listener", "change")
                         scope.launch {
                             runCatching { cloudSync.sync() }
                                 .onSuccess {
@@ -192,7 +264,10 @@ private fun CalendarikScreen() {
                     }
                 }
         } else null
-        onDispose { registration?.remove() }
+        onDispose {
+            registration?.remove()
+            if (registration != null) networkLog.log("firestore", "peer_listener", "stopped")
+        }
     }
     fun syncNow() {
         if (paired?.active != true) return
@@ -254,7 +329,7 @@ private fun CalendarikScreen() {
         updateText = "Проверяю обновление…"
         updateOpen = true
         scope.launch {
-            runCatching { GithubUpdater.check() }
+            runCatching { GithubUpdater.check(context) }
                 .onSuccess { latest ->
                     if (latest.versionCode > BuildConfig.VERSION_CODE) {
                         updateAvailable = latest
@@ -589,6 +664,30 @@ private fun CalendarikScreen() {
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
+                HorizontalDivider()
+                Text("Диагностика сети", style = MaterialTheme.typography.titleSmall)
+                Text(
+                    "Журнал операций Firebase, синхронизации и обновлений. " +
+                        "Пароли, ключи, имена событий и содержимое запросов не записываются. " +
+                        "Перед отправкой проверьте содержимое архива.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Button(
+                    onClick = ::exportDiagnostics,
+                    enabled = !exportingDiagnostics,
+                    modifier = Modifier.fillMaxWidth(),
+                ) { Text(if (exportingDiagnostics) "Создаётся ZIP…" else "Сохранить и отправить ZIP") }
+                TextButton(onClick = {
+                    scope.launch {
+                        runCatching { withContext(Dispatchers.IO) { networkLog.clear() } }
+                            .onSuccess { diagnosticStatus = "Журнал очищен" }
+                            .onFailure { diagnosticStatus = "Ошибка очистки журнала" }
+                    }
+                }) { Text("Очистить журнал") }
+                if (diagnosticStatus.isNotBlank()) {
+                    Text(diagnosticStatus, style = MaterialTheme.typography.bodySmall)
+                }
                 HorizontalDivider()
                 Button(onClick = ::checkUpdate, modifier = Modifier.fillMaxWidth()) {
                     Text("Проверить обновление")

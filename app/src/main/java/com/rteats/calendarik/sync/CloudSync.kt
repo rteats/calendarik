@@ -1,6 +1,8 @@
 package com.rteats.calendarik.sync
 
 import android.content.Context
+import android.os.SystemClock
+import com.rteats.calendarik.diagnostics.NetworkDiagnostics
 import androidx.room.withTransaction
 import androidx.work.Constraints
 import androidx.work.CoroutineWorker
@@ -41,8 +43,24 @@ class CloudSync(private val context: Context) {
     private val database = CalendarDatabase.get(context)
     private val prefs = context.getSharedPreferences("calendarik_sync_v1", Context.MODE_PRIVATE)
     private val firestore = FirebaseFirestore.getInstance()
+    private val diagnostics = NetworkDiagnostics.get(context)
 
-    suspend fun sync(): SyncResult = syncLock.withLock {
+    private suspend fun <T> traced(name: String, block: suspend () -> T): T {
+        val started = SystemClock.elapsedRealtime()
+        diagnostics.log("sync", name, "start")
+        return try {
+            block().also {
+                diagnostics.log("sync", name, "ok", SystemClock.elapsedRealtime() - started)
+            }
+        } catch (failure: Exception) {
+            diagnostics.log("sync", name, "error", SystemClock.elapsedRealtime() - started, failure = failure)
+            throw failure
+        }
+    }
+
+    suspend fun sync(): SyncResult = traced("cycle") {
+        diagnostics.logConnectivity()
+        syncLock.withLock {
         val manager = PairManager(context)
         val pair = manager.current() ?: return@withLock SyncResult(0, 0)
         if (!pair.active) return@withLock SyncResult(0, 0)
@@ -51,7 +69,7 @@ class CloudSync(private val context: Context) {
         require(uid == pair.accountUid && pair.peerUid != uid)
 
         val pairDocument = firestore.collection("pairs").document(pair.pairId)
-        val metadata = pairDocument.get(Source.SERVER).await()
+        val metadata = traced("pair_metadata_fetch") { pairDocument.get(Source.SERVER).await() }
         val members = (metadata.get("memberUids") as? List<*>)?.filterIsInstance<String>().orEmpty()
         require(metadata.getString("creatorUid") == pair.creatorUid &&
             members.size == 2 && members.contains(uid) && members.contains(pair.peerUid)) {
@@ -63,7 +81,7 @@ class CloudSync(private val context: Context) {
         val other = snapshots.document(pair.peerUid)
         pushIfChanged(pair, own.path)
 
-        val remote = other.get(Source.SERVER).await()
+        val remote = traced("peer_snapshot_fetch") { other.get(Source.SERVER).await() }
         var received = 0
         if (remote.exists()) {
             require(remote.getString("writerUid") == pair.peerUid)
@@ -72,15 +90,19 @@ class CloudSync(private val context: Context) {
                 nonce = requireNotNull(remote.getString("nonce")),
                 ciphertext = requireNotNull(remote.getString("ciphertext")),
             )
-            val plaintext = PairCrypto.open(pair.key, pair.pairId, pair.peerUid, box)
+            val plaintext = traced("peer_snapshot_decrypt") {
+                PairCrypto.open(pair.key, pair.pairId, pair.peerUid, box)
+            }
             val snapshot = SnapshotCodec.decode(plaintext)
-            received = applyRemote(pair, snapshot)
+            received = traced("peer_snapshot_merge") { applyRemote(pair, snapshot) }
             // Include newly accepted shared events in our own snapshot, making
             // them available even when the other phone is temporarily offline.
             pushIfChanged(pair, own.path)
         }
         if (received > 0) refreshWidgets(context)
+        diagnostics.log("sync", "remote_changes", "applied", count = received)
         SyncResult(received, database.sync().conflictCount())
+        }
     }
 
     private suspend fun localSnapshot(pair: LocalPair): String {
@@ -99,9 +121,13 @@ class CloudSync(private val context: Context) {
         val hash = MessageDigest.getInstance("SHA-256").digest(data.toByteArray(Charsets.UTF_8))
             .joinToString("") { "%02x".format(it) }
         val cacheKey = "uploaded:" + pair.pairId + ":" + pair.accountUid
-        if (prefs.getString(cacheKey, null) == hash) return
+        if (prefs.getString(cacheKey, null) == hash) {
+            diagnostics.log("sync", "own_snapshot_upload", "unchanged")
+            return
+        }
         val box = PairCrypto.seal(pair.key, pair.pairId, pair.accountUid, data)
-        firestore.document(documentPath).set(
+        traced("own_snapshot_upload") {
+            firestore.document(documentPath).set(
             mapOf(
                 "writerUid" to pair.accountUid,
                 "schema" to 1,
@@ -110,6 +136,7 @@ class CloudSync(private val context: Context) {
                 "updatedAt" to FieldValue.serverTimestamp(),
             )
         ).await()
+        }
         check(prefs.edit().putString(cacheKey, hash).commit()) {
             "Не удалось сохранить состояние синхронизации"
         }
@@ -198,6 +225,7 @@ class CloudSync(private val context: Context) {
             }
             database.sync().deleteConflict(eventId)
         }
+        diagnostics.log("sync", "conflict_resolved", "ok")
         requestSoon(context)
     }
 
@@ -208,6 +236,7 @@ class CloudSync(private val context: Context) {
             .build()
 
         fun requestSoon(context: Context) {
+            NetworkDiagnostics.get(context).log("work", "sync_enqueue_now", "queued")
             WorkManager.getInstance(context).enqueueUniqueWork(
                 "calendarik-sync-now", ExistingWorkPolicy.REPLACE,
                 OneTimeWorkRequestBuilder<CalendarSyncWorker>()
@@ -217,6 +246,7 @@ class CloudSync(private val context: Context) {
         }
 
         fun schedulePeriodic(context: Context) {
+            NetworkDiagnostics.get(context).log("work", "sync_schedule_periodic", "queued")
             WorkManager.getInstance(context).enqueueUniquePeriodicWork(
                 "calendarik-sync-periodic",
                 ExistingPeriodicWorkPolicy.KEEP,
@@ -230,11 +260,18 @@ class CloudSync(private val context: Context) {
 
 class CalendarSyncWorker(context: Context, params: WorkerParameters) : CoroutineWorker(context, params) {
     override suspend fun doWork(): Result {
-        if (PairManager(applicationContext).current()?.active != true) return Result.success()
+        val diagnostics = NetworkDiagnostics.get(applicationContext)
+        diagnostics.log("work", "sync_worker", "start", count = runAttemptCount)
+        if (PairManager(applicationContext).current()?.active != true) {
+            diagnostics.log("work", "sync_worker", "no_pair")
+            return Result.success()
+        }
         return try {
             CloudSync(applicationContext).sync()
+            diagnostics.log("work", "sync_worker", "success")
             Result.success()
-        } catch (_: Exception) {
+        } catch (failure: Exception) {
+            diagnostics.log("work", "sync_worker", "retry", failure = failure)
             Result.retry()
         }
     }

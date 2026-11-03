@@ -47,32 +47,32 @@ class UpgradeV1ToV2Test {
             old.version = 1
         }
         val db = Room.databaseBuilder(context, CalendarDatabase::class.java, name)
-            .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
+            .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
             .build()
         try {
             assertEquals("Preserve me", db.events().byId("old")?.title)
             assertEquals(9L, db.events().byId("old")?.revision)
             assertTrue(db.events().byId("gone")!!.deleted)
-            db.reactions().addHeart(20395, Authors.SASHA, HeartColor.RED, 100)
-            assertEquals(1L, db.reactions().get(20395, Authors.SASHA)?.redHearts)
+            db.reactions().setHeart(20395, Authors.SASHA, HeartColor.RED, 100)
+            assertEquals(1, db.reactions().get(20395, Authors.SASHA)?.heartChoice)
         } finally {
             db.close()
             context.deleteDatabase(name)
         }
     }
 
-    @Test fun countersIncrementAndMoodReplacesInSameDay() = runBlocking {
+    @Test fun heartIsExclusiveAndMoodReplacesInSameDay() = runBlocking {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         val db = Room.inMemoryDatabaseBuilder(context, CalendarDatabase::class.java).build()
         try {
             val dao = db.reactions()
-            repeat(100) { dao.addHeart(123, Authors.SASHA, HeartColor.RED) }
-            dao.addHeart(123, Authors.NASTYA, HeartColor.PINK)
+            repeat(100) { dao.setHeart(123, Authors.SASHA, HeartColor.RED) }
+            dao.setHeart(123, Authors.NASTYA, HeartColor.PINK)
             dao.setMood(123, Authors.SASHA, "😍")
             dao.setMood(123, Authors.SASHA, "😴")
-            assertEquals(100L, dao.get(123, Authors.SASHA)?.redHearts)
+            assertEquals(1, dao.get(123, Authors.SASHA)?.heartChoice)
             assertEquals("😴", dao.get(123, Authors.SASHA)?.dayEmoji)
-            assertEquals(1L, dao.get(123, Authors.NASTYA)?.pinkHearts)
+            assertEquals(2, dao.get(123, Authors.NASTYA)?.heartChoice)
             assertEquals(0L, dao.get(123, Authors.NASTYA)?.redHearts)
         } finally { db.close() }
     }

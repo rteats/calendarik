@@ -5,6 +5,8 @@ import android.content.Intent
 import android.content.pm.PackageInfo
 import android.content.pm.PackageManager
 import android.os.Build
+import android.os.SystemClock
+import com.rteats.calendarik.diagnostics.NetworkDiagnostics
 import androidx.core.content.FileProvider
 import androidx.core.content.pm.PackageInfoCompat
 import com.rteats.calendarik.BuildConfig
@@ -25,19 +27,40 @@ private const val MAX_APK_BYTES = 150L * 1024 * 1024
 data class UpdateManifest(val versionCode: Int, val versionName: String, val sha256: String)
 
 object GithubUpdater {
-    suspend fun check(): UpdateManifest = withContext(Dispatchers.IO) {
+    private suspend fun <T> traced(
+        context: Context,
+        name: String,
+        block: suspend () -> T,
+    ): T {
+        val diagnostics = NetworkDiagnostics.get(context)
+        val started = SystemClock.elapsedRealtime()
+        diagnostics.log("github", name, "start")
+        return try {
+            block().also { diagnostics.log("github", name, "ok", SystemClock.elapsedRealtime() - started) }
+        } catch (failure: Exception) {
+            diagnostics.log("github", name, "error",
+                SystemClock.elapsedRealtime() - started, failure = failure)
+            throw failure
+        }
+    }
+
+    suspend fun check(context: Context): UpdateManifest = traced(context, "update_check") {
+        withContext(Dispatchers.IO) {
         val request = URL(MANIFEST_URL).openConnection() as HttpURLConnection
         request.connectTimeout = 15_000
         request.readTimeout = 15_000
         request.setRequestProperty("Accept", "application/json")
         request.setRequestProperty("Cache-Control", "no-cache")
         try {
-            check(request.responseCode == 200) { "HTTP " + request.responseCode }
+            val httpStatus = request.responseCode
+            NetworkDiagnostics.get(context).log("github", "update_check_http", "http_$httpStatus")
+            check(httpStatus == 200) { "HTTP " + httpStatus }
             val bytes = request.inputStream.use { it.readBytes() }
             require(bytes.size < 4096) { "Неверный файл метаданных" }
             parseManifest(bytes.toString(Charsets.UTF_8))
         } finally {
             request.disconnect()
+        }
         }
     }
 
@@ -53,7 +76,8 @@ object GithubUpdater {
     }
 
     suspend fun downloadAndCheck(context: Context, release: UpdateManifest): File =
-        withContext(Dispatchers.IO) {
+        traced(context, "update_download_verify") {
+            withContext(Dispatchers.IO) {
             require(release.versionCode > BuildConfig.VERSION_CODE) { "Это не новая версия" }
             val folder = File(context.cacheDir, "updates")
             check(folder.exists() || folder.mkdirs()) { "Не удалось создать каталог загрузок" }
@@ -64,7 +88,9 @@ object GithubUpdater {
             request.connectTimeout = 15_000
             request.readTimeout = 60_000
             try {
-                check(request.responseCode == 200) { "HTTP " + request.responseCode }
+                val httpStatus = request.responseCode
+                NetworkDiagnostics.get(context).log("github", "update_download_http", "http_$httpStatus")
+                check(httpStatus == 200) { "HTTP " + httpStatus }
                 val digest = MessageDigest.getInstance("SHA-256")
                 var total = 0L
                 request.inputStream.use { input ->
@@ -92,6 +118,7 @@ object GithubUpdater {
                 throw error
             } finally {
                 request.disconnect()
+            }
             }
         }
 
