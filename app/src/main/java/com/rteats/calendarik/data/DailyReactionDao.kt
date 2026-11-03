@@ -18,6 +18,9 @@ interface DailyReactionDao {
     @Query("SELECT * FROM daily_reactions WHERE dateEpochDay = :dateEpochDay ORDER BY authorId")
     fun observeDay(dateEpochDay: Long): Flow<List<DailyReaction>>
 
+    @Query("SELECT * FROM daily_reactions WHERE dateEpochDay >= :start AND dateEpochDay < :end ORDER BY dateEpochDay, authorId")
+    fun observeBetween(start: Long, end: Long): Flow<List<DailyReaction>>
+
     @Query("SELECT * FROM daily_reactions WHERE dateEpochDay = :dateEpochDay ORDER BY authorId")
     suspend fun forDay(dateEpochDay: Long): List<DailyReaction>
 
@@ -55,4 +58,3 @@ interface DailyReactionDao {
         check(replaceMood(dateEpochDay, authorId, mood, now) == 1)
     }
 }
-
