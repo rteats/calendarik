@@ -236,7 +236,19 @@ private fun CalendarikScreen() {
     val window = remember(selectedDay, view) { dateWindow(selectedDay, view) }
     val eventsFlow = remember(window) { db.events().observeRange(window.startMillis, window.endMillis) }
     val events by eventsFlow.collectAsState(initial = emptyList())
-    val reactionsFlow = remember(window) { db.reactions().observeBetween(window.start.toEpochDay(), window.endExclusive.toEpochDay()) }
+    // The day strip displays hearts for all seven visible dates, not only the selected day.
+    val reactionWindow = remember(window, selectedDay, view) {
+        if (view == CalendarView.DAY) {
+            val monday = selectedDay.minusDays((selectedDay.dayOfWeek.value - 1).toLong())
+            DateWindow(monday, monday.plusDays(7))
+        } else window
+    }
+    val reactionsFlow = remember(reactionWindow) {
+        db.reactions().observeBetween(
+            reactionWindow.start.toEpochDay(),
+            reactionWindow.endExclusive.toEpochDay(),
+        )
+    }
     val reactions by reactionsFlow.collectAsState(initial = emptyList())
     val searchFlow = remember(searchOpen, searchQuery) {
         if (searchOpen && searchQuery.isNotBlank()) db.events().observeSearch(searchQuery.trim())
