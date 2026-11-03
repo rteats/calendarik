@@ -407,11 +407,13 @@ private fun CalendarikScreen() {
                                     CalendarView.DAY -> "План на день"
                                     CalendarView.WEEK -> "Наша неделя"
                                     CalendarView.MONTH -> "Наш календарь"
-                                    CalendarView.AGENDA -> "Предстоящие события"
+                                    CalendarView.AGENDA -> "Лента событий"
                                 },
                                 style = MaterialTheme.typography.titleMedium,
                                 fontWeight = FontWeight.Bold,
                                 color = LavenderUi.ink,
+                                modifier = Modifier.weight(1f),
+                                maxLines = 1,
                             )
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 TextButton(onClick = {
