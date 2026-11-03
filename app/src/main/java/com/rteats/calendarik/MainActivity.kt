@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
@@ -48,6 +49,8 @@ import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -66,9 +69,16 @@ import com.rteats.calendarik.data.Authors
 import com.rteats.calendarik.data.CalendarDatabase
 import com.rteats.calendarik.data.CalendarEvent
 import com.rteats.calendarik.data.HeartColor
+import com.rteats.calendarik.data.SyncEditRepository
+import com.rteats.calendarik.data.SyncConflict
 import com.rteats.calendarik.data.createOrEditEvent
 import com.rteats.calendarik.data.deleteEvent
 import com.rteats.calendarik.ui.DayReactionsPanel
+import com.rteats.calendarik.ui.PairingDialog
+import com.rteats.calendarik.sync.PairManager
+import com.rteats.calendarik.sync.CloudSync
+import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.firestore.FirebaseFirestore
 import com.rteats.calendarik.update.GithubUpdater
 import com.rteats.calendarik.update.UpdateManifest
 import com.rteats.calendarik.widget.refreshWidgets
@@ -120,16 +130,83 @@ private fun CalendarikScreen() {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val db = remember { CalendarDatabase.get(context) }
+    val editRepository = remember { SyncEditRepository(db) }
+    val pairManager = remember { PairManager(context) }
+    val cloudSync = remember { CloudSync(context) }
     val prefs = remember { context.getSharedPreferences("calendarik_preferences", 0) }
 
-    // Until authenticated pairing is implemented this is an explicit LOCAL demo identity.
+    var paired by remember { mutableStateOf(pairManager.current()) }
+    var accountUid by remember { mutableStateOf(pairManager.auth.currentUser?.uid) }
+    var pairingOpen by remember { mutableStateOf(false) }
+    var syncStatus by remember { mutableStateOf("") }
+    var conflicts by remember { mutableStateOf(emptyList<SyncConflict>()) }
+    var conflictsOpen by remember { mutableStateOf(false) }
+
     var identity by remember {
         mutableIntStateOf(
             if (prefs.getInt("identity", Authors.SASHA) == Authors.NASTYA) Authors.NASTYA
             else Authors.SASHA
         )
     }
-    var profileNotSelected by remember { mutableStateOf(!prefs.contains("identity")) }
+    var profileNotSelected by remember { mutableStateOf(!prefs.contains("identity") && accountUid == null && paired == null) }
+    val activeIdentity = paired?.role ?: identity
+    // Authentication is the source of identity once a pair is established.
+    // Keep the local profile selector exclusively for offline/demo use.
+    DisposableEffect(pairManager) {
+        val listener = FirebaseAuth.AuthStateListener { auth ->
+            accountUid = auth.currentUser?.uid
+            paired = pairManager.current()
+        }
+        pairManager.auth.addAuthStateListener(listener)
+        onDispose { pairManager.auth.removeAuthStateListener(listener) }
+    }
+    LaunchedEffect(paired?.pairId, paired?.peerUid) {
+        if (paired?.active == true) {
+            CloudSync.schedulePeriodic(context)
+            runCatching { cloudSync.sync() }
+                .onSuccess {
+                    conflicts = db.sync().conflicts()
+                    syncStatus = "Синхронизировано"
+                }
+                .onFailure { syncStatus = "Ошибка синхронизации: " + (it.localizedMessage ?: "нет соединения") }
+        }
+    }
+    DisposableEffect(paired?.pairId, paired?.peerUid) {
+        val current = paired
+        val registration = if (current?.active == true) {
+            FirebaseFirestore.getInstance()
+                .collection("pairs").document(current.pairId)
+                .collection("snapshots").document(current.peerUid)
+                .addSnapshotListener { snapshot, failure ->
+                    if (failure != null) {
+                        syncStatus = "Ошибка соединения: " + (failure.localizedMessage ?: "нет доступа")
+                    } else if (snapshot?.exists() == true) {
+                        scope.launch {
+                            runCatching { cloudSync.sync() }
+                                .onSuccess {
+                                    conflicts = db.sync().conflicts()
+                                    syncStatus = "Синхронизировано"
+                                }
+                                .onFailure { syncStatus = "Ошибка синхронизации: " + (it.localizedMessage ?: "сеть") }
+                        }
+                    }
+                }
+        } else null
+        onDispose { registration?.remove() }
+    }
+    fun syncNow() {
+        if (paired?.active != true) return
+        CloudSync.requestSoon(context)
+        scope.launch {
+            runCatching { cloudSync.sync() }
+                .onSuccess {
+                    conflicts = db.sync().conflicts()
+                    syncStatus = "Синхронизировано"
+                }
+                .onFailure { syncStatus = "Ошибка синхронизации: " + (it.localizedMessage ?: "нет сети") }
+        }
+    }
+
     var dateText by rememberSaveable { mutableStateOf(LocalDate.now().toString()) }
     val selectedDay = remember(dateText) { LocalDate.parse(dateText) }
     var view by rememberSaveable { mutableStateOf(CalendarView.WEEK) }
@@ -167,6 +244,7 @@ private fun CalendarikScreen() {
     fun showEvent(event: CalendarEvent) { viewing = event }
     fun addEvent() { editing = null; editorOpen = true }
     fun changeIdentity(newIdentity: Int) {
+        if (paired != null) return
         identity = newIdentity
         prefs.edit().putInt("identity", newIdentity).apply()
     }
@@ -190,16 +268,18 @@ private fun CalendarikScreen() {
     fun addHeart(color: HeartColor) {
         scope.launch {
             runCatching {
-                db.reactions().addHeart(selectedDay.toEpochDay(), identity, color)
+                editRepository.heart(selectedDay.toEpochDay(), activeIdentity, color)
                 refreshWidgets(context)
+                syncNow()
             }.onFailure { error = it.message ?: "Не удалось сохранить сердечко" }
         }
     }
     fun setMood(mood: String?) {
         scope.launch {
             runCatching {
-                db.reactions().setMood(selectedDay.toEpochDay(), identity, mood)
+                editRepository.mood(selectedDay.toEpochDay(), activeIdentity, mood)
                 refreshWidgets(context)
+                syncNow()
             }.onFailure { error = it.message ?: "Не удалось сохранить настроение" }
         }
     }
@@ -210,7 +290,16 @@ private fun CalendarikScreen() {
                 title = {
                     Column {
                         Text("Календарик", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-                        Text("Саша и Настя", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text(
+                            when {
+                                paired?.active == true -> "Саша и Настя · синхронизация"
+                                paired != null -> "Ожидается подключение пары"
+                                accountUid != null -> "Аккаунт подключён · без пары"
+                                else -> "Саша и Настя · локально"
+                            },
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
                     }
                 },
                 actions = {
@@ -228,6 +317,10 @@ private fun CalendarikScreen() {
                             DropdownMenuItem(
                                 text = { Text("Сегодня") },
                                 onClick = { moreMenu = false; selectDate(LocalDate.now()) },
+                            )
+                            DropdownMenuItem(
+                                text = { Text(if (accountUid == null) "Вход и синхронизация" else "Аккаунт и синхронизация") },
+                                onClick = { moreMenu = false; pairingOpen = true },
                             )
                             DropdownMenuItem(
                                 text = { Text("Саша и Настя · настройки") },
@@ -315,13 +408,13 @@ private fun CalendarikScreen() {
                 Box(modifier = Modifier.fillMaxSize()) {
                     when (view) {
                         CalendarView.DAY -> CalendarDayView(
-                            selectedDay, visibleEvents, reactions, identity, ::showEvent, ::addHeart, ::setMood,
+                            selectedDay, visibleEvents, reactions, activeIdentity, ::showEvent, ::addHeart, ::setMood,
                         )
                         CalendarView.WEEK -> CalendarWeekView(
                             selectedDay, visibleEvents, ::selectDate, ::showEvent,
                         )
                         CalendarView.MONTH -> CalendarMonthView(
-                            selectedDay, visibleEvents, reactions, identity, ::selectDate, ::showEvent, ::addHeart, ::setMood,
+                            selectedDay, visibleEvents, reactions, activeIdentity, ::selectDate, ::showEvent, ::addHeart, ::setMood,
                         )
                         CalendarView.AGENDA -> CalendarAgendaView(
                             selectedDay, visibleEvents, ::selectDate, ::showEvent,
@@ -337,7 +430,12 @@ private fun CalendarikScreen() {
             onDismissRequest = {},
             title = { Text("Кто пользуется приложением?") },
             text = {
-                Text("Выберите локальный профиль для этого устройства. Пока это тестовый выбор, а не защищённое подключение двух телефонов.")
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Text("Выберите локальный профиль или подключите аккаунт для синхронизации с другим телефоном.")
+                    TextButton(onClick = { profileNotSelected = false; pairingOpen = true }) {
+                        Text("Войти или зарегистрироваться")
+                    }
+                }
             },
             confirmButton = {
                 TextButton(onClick = { changeIdentity(Authors.SASHA); profileNotSelected = false }) {
@@ -370,7 +468,7 @@ private fun CalendarikScreen() {
 
     if (viewing != null) {
         val event = viewing!!
-        val canEdit = Authors.hasPermission(event.authorMask, identity)
+        val canEdit = Authors.hasPermission(event.authorMask, activeIdentity)
         AlertDialog(
             onDismissRequest = { viewing = null },
             title = { Text(event.title) },
@@ -399,16 +497,17 @@ private fun CalendarikScreen() {
         EventEditor(
             original = editing,
             defaultDay = selectedDay,
-            identity = identity,
+            identity = activeIdentity,
             onDismiss = { editorOpen = false },
             onSave = { day, title, notes, begin, finish, authors ->
                 runCatching {
-                    createOrEditEvent(editing, identity, title, notes, day, begin, finish, authors)
+                    createOrEditEvent(editing, activeIdentity, title, notes, day, begin, finish, authors)
                 }.onSuccess { record ->
                     scope.launch {
                         runCatching {
-                            db.events().save(record)
+                            editRepository.save(record)
                             refreshWidgets(context)
+                            syncNow()
                         }.onSuccess {
                             editorOpen = false
                             selectDate(day)
@@ -431,8 +530,9 @@ private fun CalendarikScreen() {
                     deleteCandidate = null
                     scope.launch {
                         runCatching {
-                            db.events().save(deleteEvent(old, identity))
+                            editRepository.save(deleteEvent(old, activeIdentity))
                             refreshWidgets(context)
+                            syncNow()
                         }.onSuccess { editorOpen = false }
                             .onFailure { error = it.message ?: "Не удалось удалить событие" }
                     }
@@ -445,19 +545,47 @@ private fun CalendarikScreen() {
     if (settingsOpen) {
         ModalBottomSheet(onDismissRequest = { settingsOpen = false }) {
             Column(
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp).padding(bottom = 32.dp),
+                modifier = Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(horizontal = 24.dp).padding(bottom = 32.dp),
                 verticalArrangement = Arrangement.spacedBy(16.dp),
             ) {
                 Text("Саша и Настя", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.SemiBold)
                 Text("Один календарь для двоих. Личные события изменяет только их автор, общие — оба.", style = MaterialTheme.typography.bodyMedium)
                 HorizontalDivider()
+                Text("Аккаунт и синхронизация", style = MaterialTheme.typography.titleSmall)
+                Text(
+                    when {
+                        paired?.active == true -> "Пара подключена · " + Authors.label(activeIdentity)
+                        paired != null -> "Пара создана, ожидается подтверждение второго телефона"
+                        accountUid != null -> "Вход выполнен, пару ещё нужно создать"
+                        else -> "Не подключено. События сохраняются только на телефоне"
+                    },
+                    style = MaterialTheme.typography.bodySmall,
+                )
+                Button(
+                    onClick = { settingsOpen = false; pairingOpen = true },
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text(if (accountUid == null) "Войти или зарегистрироваться" else "Управление аккаунтом и парой")
+                }
+                if (paired?.active == true) {
+                    TextButton(onClick = { syncNow() }) { Text("Синхронизировать сейчас") }
+                    if (syncStatus.isNotBlank()) {
+                        Text(syncStatus, style = MaterialTheme.typography.bodySmall)
+                    }
+                    if (conflicts.isNotEmpty()) {
+                        Button(onClick = { settingsOpen = false; conflictsOpen = true }) {
+                            Text("Разрешить конфликты (" + conflicts.size + ")")
+                        }
+                    }
+                }
+                HorizontalDivider()
                 Text("Локальный профиль для тестирования", style = MaterialTheme.typography.titleSmall)
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    FilterChip(selected = identity == Authors.SASHA, onClick = { changeIdentity(Authors.SASHA) }, label = { Text("Я Саша") })
-                    FilterChip(selected = identity == Authors.NASTYA, onClick = { changeIdentity(Authors.NASTYA) }, label = { Text("Я Настя") })
+                    FilterChip(selected = activeIdentity == Authors.SASHA, enabled = paired == null, onClick = { changeIdentity(Authors.SASHA) }, label = { Text("Я Саша") })
+                    FilterChip(selected = activeIdentity == Authors.NASTYA, enabled = paired == null, onClick = { changeIdentity(Authors.NASTYA) }, label = { Text("Я Настя") })
                 }
                 Text(
-                    "Переключатель не подтверждает личность. Подключение второго устройства, защищённая пара и синхронизация пока не включены. Все изменения сохраняются только на этом устройстве.",
+                    if (paired != null) "Профиль закреплён за связанной учётной записью." else "Локальный выбор не подтверждает личность. Для синхронизации используйте вход через Firebase.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -468,6 +596,63 @@ private fun CalendarikScreen() {
                 Text("Версия " + BuildConfig.VERSION_NAME, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
+    }
+
+    if (pairingOpen) {
+        PairingDialog(
+            manager = pairManager,
+            onClose = { pairingOpen = false },
+            onPairChanged = { updated ->
+                paired = updated
+                accountUid = pairManager.auth.currentUser?.uid
+                if (updated != null) {
+                    // Preserve role across the next launch; avoid demo profile onboarding after pairing.
+                    prefs.edit().putInt("identity", updated.role).apply()
+                    profileNotSelected = false
+                }
+                if (updated?.active == true) syncNow()
+            },
+        )
+    }
+    if (conflictsOpen && conflicts.isNotEmpty()) {
+        val currentConflict = conflicts.first()
+        val remote = runCatching {
+            com.rteats.calendarik.sync.SnapshotCodec.eventFromJson(
+                org.json.JSONObject(currentConflict.remoteJson)
+            )
+        }.getOrNull()
+        AlertDialog(
+            onDismissRequest = { conflictsOpen = false },
+            title = { Text("Конфликт общего события") },
+            text = {
+                Text("Оба телефона изменили событие «" + (remote?.title ?: currentConflict.eventId) +
+                    "». Выберите версию, которую сохранить.")
+            },
+            confirmButton = {
+                Button(onClick = {
+                    scope.launch {
+                        runCatching { cloudSync.resolve(currentConflict.eventId, true) }
+                            .onSuccess {
+                                conflicts = db.sync().conflicts()
+                                conflictsOpen = conflicts.isNotEmpty()
+                                syncNow()
+                            }.onFailure { error = it.localizedMessage ?: "Ошибка разрешения конфликта" }
+                    }
+                }) { Text("Принять вторую") }
+            },
+            dismissButton = {
+                TextButton(onClick = {
+                    scope.launch {
+                        runCatching { cloudSync.resolve(currentConflict.eventId, false) }
+                            .onSuccess {
+                                conflicts = db.sync().conflicts()
+                                conflictsOpen = conflicts.isNotEmpty()
+                                syncNow()
+                            }.onFailure { error = it.localizedMessage ?: "Ошибка разрешения конфликта" }
+                    }
+                }) { Text("Оставить мою") }
+            },
+        )
     }
 
     if (error != null) {
