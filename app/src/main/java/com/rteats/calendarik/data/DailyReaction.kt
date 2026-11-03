@@ -1,5 +1,6 @@
 package com.rteats.calendarik.data
 
+import androidx.room.ColumnInfo
 import androidx.room.Entity
 import java.time.LocalDate
 
@@ -16,7 +17,7 @@ data class DailyReaction(
     val authorId: Int,
     val redHearts: Long = 0,
     val pinkHearts: Long = 0,
-    val heartChoice: Int = 0,
+    @ColumnInfo(defaultValue = "0") val heartChoice: Int = 0,
     val dayEmoji: String? = null,
     val revision: Long = 0,
     val updatedAtMillis: Long = 0,
