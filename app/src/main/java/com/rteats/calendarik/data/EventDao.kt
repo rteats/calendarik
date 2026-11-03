@@ -17,6 +17,9 @@ interface EventDao {
     @Query("SELECT * FROM calendar_events WHERE deleted = 0 AND startsAtMillis < :end AND endsAtMillis > :start ORDER BY startsAtMillis, id")
     suspend fun listForRange(start: Long, end: Long): List<CalendarEvent>
 
+    @Query("SELECT * FROM calendar_events WHERE deleted = 0 AND startsAtMillis >= :after ORDER BY startsAtMillis, id LIMIT :limit")
+    suspend fun listUpcoming(after: Long, limit: Int): List<CalendarEvent>
+
     @Query("SELECT * FROM calendar_events WHERE deleted = 0 AND (title LIKE '%' || :query || '%' OR notes LIKE '%' || :query || '%') ORDER BY startsAtMillis, id")
     fun observeSearch(query: String): Flow<List<CalendarEvent>>
 

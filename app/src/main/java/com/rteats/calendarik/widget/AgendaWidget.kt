@@ -4,6 +4,9 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.produceState
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -26,7 +29,6 @@ import androidx.glance.appwidget.state.getAppWidgetState
 import androidx.glance.appwidget.state.updateAppWidgetState
 import androidx.glance.appwidget.updateAll
 import androidx.glance.action.ActionParameters
-import androidx.glance.action.actionParametersOf
 import androidx.glance.action.clickable
 import androidx.glance.background
 import androidx.glance.layout.Alignment
@@ -50,14 +52,16 @@ import com.rteats.calendarik.data.Authors
 import com.rteats.calendarik.data.CalendarDatabase
 import com.rteats.calendarik.data.CalendarEvent
 import com.rteats.calendarik.data.DailyReaction
-import com.rteats.calendarik.sync.PairManager
-import com.rteats.calendarik.sync.CloudSync
 import com.rteats.calendarik.ui.MoodCatalog
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.util.Locale
+import java.util.concurrent.ConcurrentHashMap
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 
 object WidgetNavigation {
     const val EXTRA_DAY = "calendarik_widget_day"
@@ -80,16 +84,61 @@ private fun ColorProvider(color: Color): androidx.glance.unit.ColorProvider =
     androidx.glance.color.ColorProvider(color, color)
 
 private val offsetKey = intPreferencesKey("dayOffset")
-private val directionKey = ActionParameters.Key<Int>("direction")
-private val ratingKey = ActionParameters.Key<Int>("rating")
-private val dayKey = ActionParameters.Key<Long>("dateEpochDay")
 private val ink = Color(0xFF302758)
 private val softText = Color(0xFF756898)
 private val violet = Color(0xFF8164C9)
-private val pink = Color(0xFFE68BC7)
-private val rose = Color(0xFFFFF6FB)
+private val panel = Color(0xFFF9F5FF)
+private val line = Color(0xFFE4DDF2)
 private val dateFormatter = DateTimeFormatter.ofPattern("d MMMM, EEE", Locale.forLanguageTag("ru-RU"))
+private val shortDateFormatter = DateTimeFormatter.ofPattern("d MMM", Locale.forLanguageTag("ru-RU"))
 private val timeFormatter = DateTimeFormatter.ofPattern("HH:mm")
+private val upcomingDateFormatter = DateTimeFormatter.ofPattern("dd.MM")
+private val widgetUpdateMutex = Mutex()
+private val widgetOffsets = ConcurrentHashMap<GlanceId, MutableStateFlow<Int>>()
+private val widgetRevision = MutableStateFlow(0L)
+
+private data class WidgetData(
+    val day: LocalDate,
+    val events: List<CalendarEvent>,
+    val upcoming: List<CalendarEvent>,
+    val reactions: List<DailyReaction>,
+)
+
+private suspend fun loadWidgetData(context: Context, day: LocalDate, zone: ZoneId): WidgetData {
+    val start = day.atStartOfDay(zone).toInstant().toEpochMilli()
+    val end = day.plusDays(1).atStartOfDay(zone).toInstant().toEpochMilli()
+    val db = CalendarDatabase.get(context)
+    return WidgetData(
+        day = day,
+        events = db.events().listForRange(start, end).sortedBy { it.startsAtMillis }.take(4),
+        upcoming = db.events().listUpcoming(end, 2),
+        reactions = db.reactions().forDay(day.toEpochDay()),
+    )
+}
+
+internal data class WidgetLayout(
+    val showSubtitle: Boolean,
+    val showMoods: Boolean,
+    val todayLimit: Int,
+    val upcomingLimit: Int,
+)
+
+internal fun widgetLayout(width: Int, height: Int): WidgetLayout = WidgetLayout(
+    showSubtitle = width >= 190 && height >= 70,
+    showMoods = height >= 120,
+    todayLimit = when {
+        height < 195 -> 0
+        height < 320 -> 1
+        height < 420 && width >= 220 -> 1
+        height < 420 -> 2
+        else -> 3
+    },
+    upcomingLimit = when {
+        width < 220 || height < 320 -> 0
+        height < 440 -> 1
+        else -> 2
+    },
+)
 
 /** One responsive, navigable day agenda. Each installed widget stores its own day offset. */
 class AgendaWidget : GlanceAppWidget() {
@@ -97,17 +146,25 @@ class AgendaWidget : GlanceAppWidget() {
 
     override suspend fun provideGlance(context: Context, id: GlanceId) {
         val state = getAppWidgetState(context, PreferencesGlanceStateDefinition, id)
-        val offset = (state[offsetKey] ?: 0).coerceIn(-30, 30)
+        val offsetFlow = widgetOffsets.getOrPut(id) {
+            MutableStateFlow(state[offsetKey] ?: 0)
+        }
         val zone = ZoneId.systemDefault()
-        val day = LocalDate.now(zone).plusDays(offset.toLong())
-        val start = day.atStartOfDay(zone).toInstant().toEpochMilli()
-        val end = day.plusDays(1).atStartOfDay(zone).toInstant().toEpochMilli()
-        val db = CalendarDatabase.get(context)
-        val events = db.events().listForRange(start, end).sortedBy { it.startsAtMillis }.take(5)
-        val reactions = db.reactions().forDay(day.toEpochDay())
-        val rating = db.sharedHearts().get(day.toEpochDay())?.heartChoice ?: 0
+        val initial = loadWidgetData(context, LocalDate.now(zone).plusDays(offsetFlow.value.toLong()), zone)
         provideContent {
-            AgendaContent(context, day, events, reactions, rating, zone)
+            val offset by offsetFlow.collectAsState()
+            val revision by widgetRevision.collectAsState()
+            val day = LocalDate.now(zone).plusDays(offset.toLong())
+            val data by produceState(initialValue = initial, key1 = day, key2 = revision) {
+                value = loadWidgetData(context, day, zone)
+            }
+            AgendaContent(
+                context, day,
+                if (data.day == day) data.events else emptyList(),
+                if (data.day == day) data.upcoming else emptyList(),
+                if (data.day == day) data.reactions else emptyList(),
+                zone,
+            )
         }
     }
 }
@@ -117,170 +174,175 @@ private fun AgendaContent(
     context: Context,
     day: LocalDate,
     events: List<CalendarEvent>,
+    upcoming: List<CalendarEvent>,
     reactions: List<DailyReaction>,
-    rating: Int,
     zone: ZoneId,
 ) {
     val size = LocalSize.current
-    val compact = size.height < 200.dp
-    val maxEvents = when {
-        size.height < 200.dp -> 1
-        size.height < 290.dp -> 2
-        else -> 4
+    val layout = widgetLayout(size.width.value.toInt(), size.height.value.toInt())
+    val compact = size.height < 230.dp
+    val veryNarrow = size.width < 150.dp
+    val narrow = size.width < 190.dp
+    val today = LocalDate.now(zone)
+    val heading = when {
+        veryNarrow -> day.dayOfMonth.toString()
+        narrow -> day.format(shortDateFormatter)
+        day == today -> "Сегодня"
+        day == today.plusDays(1) -> "Завтра"
+        day == today.minusDays(1) -> "Вчера"
+        else -> "Выбранный день"
     }
     Column(
         modifier = GlanceModifier.fillMaxSize()
             .appWidgetBackground()
-            .background(Color(0xFFF7F1FF))
-            .cornerRadius(24.dp)
-            .padding(if (compact) 10.dp else 14.dp),
+            .background(panel)
+            .cornerRadius(28.dp)
+            .padding(if (veryNarrow || !layout.showMoods) 8.dp else 16.dp),
     ) {
         Row(modifier = GlanceModifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            Column(modifier = GlanceModifier.defaultWeight()
-                .clickable(actionStartActivity(WidgetNavigation.intent(context, day)))) {
-                Text("Наш день", style = TextStyle(
-                    color = ColorProvider(ink), fontWeight = FontWeight.Bold,
-                    fontSize = if (compact) 14.sp else 17.sp,
+            Column(modifier = GlanceModifier.defaultWeight()) {
+                Text(heading, maxLines = 1,
+                    modifier = GlanceModifier.clickable(actionStartActivity(WidgetNavigation.intent(context, day))),
+                    style = TextStyle(
+                    color = ColorProvider(violet), fontWeight = FontWeight.Bold,
+                    fontSize = if (narrow) 14.sp else 22.sp,
                 ))
-                Text(day.format(dateFormatter), maxLines = 1,
-                    style = TextStyle(color = ColorProvider(softText), fontSize = 11.sp))
-            }
-            Text("‹", modifier = GlanceModifier.size(31.dp)
-                .clickable(actionRunCallback<ChangeWidgetDay>(
-                    actionParametersOf(directionKey to -1))),
-                style = TextStyle(color = ColorProvider(violet), fontSize = 23.sp))
-            Text("›", modifier = GlanceModifier.size(31.dp)
-                .clickable(actionRunCallback<ChangeWidgetDay>(
-                    actionParametersOf(directionKey to 1))),
-                style = TextStyle(color = ColorProvider(violet), fontSize = 23.sp))
-        }
-        Spacer(GlanceModifier.height(8.dp))
-        Row(
-            modifier = GlanceModifier.fillMaxWidth()
-                .background(rose).cornerRadius(15.dp).padding(5.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            (1..5).forEach { level ->
-                Box(
-                    modifier = GlanceModifier.defaultWeight().height(32.dp)
-                        .clickable(actionRunCallback<SetWidgetHeart>(
-                            actionParametersOf(
-                                ratingKey to level,
-                                dayKey to day.toEpochDay(),
-                            ))),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Image(
-                        provider = ImageProvider(R.drawable.fa_heart),
-                        contentDescription = "Поставить сердечко $level из 5",
-                        colorFilter = androidx.glance.ColorFilter.tint(
-                            ColorProvider(if (rating == level) pink else Color(0xFFF1C9E3))),
-                        modifier = GlanceModifier.size(30.dp),
-                    )
-                    Text(level.toString(), style = TextStyle(
-                        color = ColorProvider(if (rating == level) Color.White else softText),
-                        fontSize = 12.sp, fontWeight = FontWeight.Bold,
-                    ))
+                if (layout.showSubtitle) {
+                    Text(day.format(dateFormatter), maxLines = 1,
+                        modifier = GlanceModifier.clickable(actionStartActivity(WidgetNavigation.intent(context, day))),
+                        style = TextStyle(color = ColorProvider(softText), fontSize = 13.sp))
                 }
             }
+            WidgetDayArrow("‹", previous = true, veryNarrow = veryNarrow)
+            WidgetDayArrow("›", previous = false, veryNarrow = veryNarrow)
         }
-        if (size.height >= 200.dp) {
-            Spacer(GlanceModifier.height(8.dp))
-            Row(modifier = GlanceModifier.fillMaxWidth()) {
-                listOf(Authors.SASHA, Authors.NASTYA).forEach { author ->
+        if (layout.showMoods) {
+            Spacer(GlanceModifier.height(if (compact) 8.dp else 16.dp))
+            Row(modifier = GlanceModifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                listOf(Authors.SASHA, Authors.NASTYA).forEachIndexed { index, author ->
+                    if (index > 0) {
+                        Spacer(GlanceModifier.width(1.dp).height(50.dp).background(line))
+                    }
                     val mood = reactions.firstOrNull { it.authorId == author }?.dayEmoji
-                    Row(
+                    Column(
                         modifier = GlanceModifier.defaultWeight()
                             .clickable(actionStartActivity(WidgetNavigation.intent(context, day))),
-                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalAlignment = Alignment.CenterHorizontally,
                     ) {
-                        if (mood != null && MoodCatalog.resource(mood) != null) {
-                            Image(
-                                provider = ImageProvider(MoodCatalog.resource(mood)!!),
-                                contentDescription = MoodCatalog.label(mood),
-                                colorFilter = androidx.glance.ColorFilter.tint(ColorProvider(
-                                    if (author == Authors.SASHA) Color(0xFF6E7FB8) else Color(0xFFBD72AD))),
-                                modifier = GlanceModifier.size(15.dp),
-                            )
-                        } else {
-                            Text(mood ?: "·", style = TextStyle(
-                                color = ColorProvider(softText), fontSize = 13.sp))
+                        Text(if (author == Authors.SASHA) "Саша" else "Настя", maxLines = 1,
+                            style = TextStyle(color = ColorProvider(ink), fontSize = 14.sp))
+                        Spacer(GlanceModifier.height(4.dp))
+                        Box(
+                            modifier = GlanceModifier.size(29.dp).background(
+                                if (mood == null) Color(0xFFE9E1F5) else violet,
+                            ).cornerRadius(15.dp),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            val resource = MoodCatalog.resource(mood)
+                            when {
+                                resource != null -> Image(
+                                    ImageProvider(resource), MoodCatalog.label(mood!!),
+                                    modifier = GlanceModifier.size(18.dp),
+                                    colorFilter = androidx.glance.ColorFilter.tint(ColorProvider(Color.White)),
+                                )
+                                mood != null -> Text(mood, maxLines = 1,
+                                    style = TextStyle(color = ColorProvider(Color.White), fontSize = 15.sp))
+                                else -> Image(
+                                    ImageProvider(R.drawable.fa_face_meh),
+                                    "Настроение не выбрано",
+                                    modifier = GlanceModifier.size(18.dp),
+                                    colorFilter = androidx.glance.ColorFilter.tint(ColorProvider(softText)),
+                                )
+                            }
                         }
-                        Spacer(GlanceModifier.width(4.dp))
-                        Text(if (author == Authors.SASHA) "Саша" else "Настя",
-                            maxLines = 1,
-                            style = TextStyle(color = ColorProvider(softText), fontSize = 11.sp))
                     }
                 }
             }
         }
-        if (size.height >= 150.dp) {
-        Spacer(GlanceModifier.height(if (compact) 7.dp else 10.dp))
-        Row(modifier = GlanceModifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            Text("Планы", modifier = GlanceModifier.defaultWeight(),
-                style = TextStyle(color = ColorProvider(ink),
-                    fontWeight = FontWeight.Bold, fontSize = 12.sp))
-            Text("+", modifier = GlanceModifier.size(28.dp)
-                .clickable(actionStartActivity(WidgetNavigation.intent(context, day, createEvent = true))),
-                style = TextStyle(color = ColorProvider(violet), fontSize = 21.sp))
-        }
-        if (events.isEmpty()) {
-            Text("Пока нет событий", style = TextStyle(
-                color = ColorProvider(softText), fontSize = 11.sp))
-        } else {
-            events.take(maxEvents).forEach { event ->
-                val time = Instant.ofEpochMilli(event.startsAtMillis)
-                    .atZone(zone).format(timeFormatter)
-                Text("$time  ${event.title}", maxLines = 1,
-                    modifier = GlanceModifier.fillMaxWidth()
-                        .padding(vertical = 3.dp)
-                        .clickable(actionStartActivity(WidgetNavigation.intent(context, day, event.id))),
-                    style = TextStyle(color = ColorProvider(ink), fontSize = 12.sp))
+        if (layout.todayLimit > 0) {
+            Spacer(GlanceModifier.height(if (compact) 8.dp else 17.dp))
+            Row(modifier = GlanceModifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Text(if (day == today) "Планы на сегодня" else "Планы на день",
+                    modifier = GlanceModifier.defaultWeight(), maxLines = 1,
+                    style = TextStyle(color = ColorProvider(ink), fontWeight = FontWeight.Bold,
+                        fontSize = if (narrow) 13.sp else 15.sp))
+                Box(
+                    modifier = GlanceModifier.size(30.dp)
+                        .clickable(actionStartActivity(WidgetNavigation.intent(context, day, createEvent = true))),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text("+", style = TextStyle(color = ColorProvider(violet), fontSize = 26.sp))
+                }
             }
-            if (events.size > maxEvents) {
-                Text("+ ещё ${events.size - maxEvents}", modifier = GlanceModifier
-                    .clickable(actionStartActivity(WidgetNavigation.intent(context, day))),
-                    style = TextStyle(color = ColorProvider(violet), fontSize = 11.sp))
+            if (events.isEmpty()) {
+                Text("Нет событий", style = TextStyle(color = ColorProvider(softText), fontSize = 12.sp))
+            } else {
+                events.take(layout.todayLimit).forEach { event ->
+                    WidgetEventRow(context, event, zone, compact)
+                }
             }
         }
+        if (layout.upcomingLimit > 0 && upcoming.isNotEmpty()) {
+            Spacer(GlanceModifier.height(17.dp))
+            Text("Планы на ближайшее время", maxLines = 1,
+                style = TextStyle(color = ColorProvider(ink), fontWeight = FontWeight.Bold,
+                    fontSize = 15.sp))
+            upcoming.take(layout.upcomingLimit).forEach { event ->
+                val eventDay = Instant.ofEpochMilli(event.startsAtMillis).atZone(zone).toLocalDate()
+                Box(modifier = GlanceModifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+                    Text(eventDay.format(upcomingDateFormatter),
+                        style = TextStyle(color = ColorProvider(violet), fontWeight = FontWeight.Bold,
+                            fontSize = 14.sp))
+                }
+                WidgetEventRow(context, event, zone)
+            }
         }
     }
 }
 
-/** One tap in the widget updates the same shared Room row as the full application. */
-class SetWidgetHeart : ActionCallback {
-    override suspend fun onAction(
-        context: Context,
-        glanceId: GlanceId,
-        parameters: ActionParameters,
+@Composable
+private fun WidgetDayArrow(glyph: String, previous: Boolean, veryNarrow: Boolean) {
+    Box(
+        modifier = GlanceModifier.size(if (veryNarrow) 36.dp else 44.dp).clickable(
+            if (previous) actionRunCallback<PreviousWidgetDay>()
+            else actionRunCallback<NextWidgetDay>(),
+        ),
+        contentAlignment = Alignment.Center,
     ) {
-        val level = parameters[ratingKey] ?: return
-        val day = parameters[dayKey] ?: return
-        if (level !in 1..5) return
-        val pairedRole = PairManager(context).current()?.role
-        val stored = context.getSharedPreferences("calendarik_preferences", 0)
-            .getInt("identity", Authors.SASHA)
-        val author = pairedRole ?: if (stored == Authors.NASTYA) Authors.NASTYA else Authors.SASHA
-        val dao = CalendarDatabase.get(context).sharedHearts()
-        val current = dao.get(day)?.heartChoice ?: 0
-        dao.setHeart(day, author, if (current == level) null else level)
-        refreshWidgets(context)
-        CloudSync.requestSoon(context)
+        Text(glyph, style = TextStyle(color = ColorProvider(violet), fontSize = 24.sp))
     }
 }
 
-class ChangeWidgetDay : ActionCallback {
-    override suspend fun onAction(
-        context: Context,
-        glanceId: GlanceId,
-        parameters: ActionParameters,
-    ) {
-        val direction = parameters[directionKey] ?: return
-        if (direction !in -1..1 || direction == 0) return
+@Composable
+private fun WidgetEventRow(context: Context, event: CalendarEvent, zone: ZoneId, compact: Boolean = false) {
+    val start = Instant.ofEpochMilli(event.startsAtMillis).atZone(zone)
+    Text("${start.format(timeFormatter)}  ${event.title}", maxLines = 1,
+        modifier = GlanceModifier.fillMaxWidth().padding(vertical = if (compact) 1.dp else 4.dp)
+            .clickable(actionStartActivity(WidgetNavigation.intent(context, start.toLocalDate(), event.id))),
+        style = TextStyle(color = ColorProvider(ink), fontSize = if (compact) 12.sp else 14.sp))
+}
+
+private suspend fun moveWidgetDay(context: Context, glanceId: GlanceId, direction: Int) {
+    widgetUpdateMutex.withLock {
+        var newOffset = 0
         updateAppWidgetState(context, glanceId) { prefs ->
-            prefs[offsetKey] = ((prefs[offsetKey] ?: 0) + direction).coerceIn(-30, 30)
+            newOffset = (prefs[offsetKey] ?: 0) + direction
+            prefs[offsetKey] = newOffset
         }
+        widgetOffsets[glanceId]?.value = newOffset
         AgendaWidget().update(context, glanceId)
+    }
+}
+
+class PreviousWidgetDay : ActionCallback {
+    override suspend fun onAction(context: Context, glanceId: GlanceId, parameters: ActionParameters) {
+        moveWidgetDay(context, glanceId, -1)
+    }
+}
+
+class NextWidgetDay : ActionCallback {
+    override suspend fun onAction(context: Context, glanceId: GlanceId, parameters: ActionParameters) {
+        moveWidgetDay(context, glanceId, 1)
     }
 }
 
@@ -289,5 +351,8 @@ class AgendaWidgetReceiver : GlanceAppWidgetReceiver() {
 }
 
 suspend fun refreshWidgets(context: Context) {
-    AgendaWidget().updateAll(context)
+    widgetUpdateMutex.withLock {
+        widgetRevision.value += 1
+        AgendaWidget().updateAll(context)
+    }
 }

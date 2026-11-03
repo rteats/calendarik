@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent" android:layout_height="match_parent"
-    android:padding="12dp" android:background="#F7F1FF">
+    android:padding="8dp" android:background="#F9F5FF">
     <TextView android:layout_width="match_parent" android:layout_height="wrap_content"
-        android:text="Наш день · Календарик" android:textColor="#302758" android:textSize="18sp"/>
+        android:text="Сегодня" android:textColor="#8164C9" android:textSize="16sp"/>
 </FrameLayout>
