@@ -2,6 +2,7 @@ package com.rteats.calendarik
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.drawBehind
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -16,11 +17,13 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -30,6 +33,8 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.EventNote
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -39,6 +44,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -85,9 +91,9 @@ internal fun dateWindow(day: LocalDate, view: CalendarView): DateWindow = when (
 private val dateHeading = DateTimeFormatter.ofPattern("EEEE, d MMMM", Locale.forLanguageTag("ru-RU"))
 private val shortDay = DateTimeFormatter.ofPattern("EEE, d MMM", Locale.forLanguageTag("ru-RU"))
 private val timeFormat = DateTimeFormatter.ofPattern("HH:mm")
-private val lilac = Color(0xFF9774D4)
-private val blue = Color(0xFF819AE4)
-private val pink = Color(0xFFD092D0)
+private val lilac = Color(0xFFAC87E8)
+private val blue = Color(0xFF89B6F6)
+private val pink = Color(0xFFE2A2E4)
 
 private fun eventDay(event: CalendarEvent): LocalDate =
     Instant.ofEpochMilli(event.startsAtMillis).atZone(ZoneId.systemDefault()).toLocalDate()
@@ -122,32 +128,66 @@ internal fun EventCard(
     showDate: Boolean = false,
 ) {
     val accent = eventColor(event.authorMask)
-    Card(
-        modifier = modifier.fillMaxWidth().clickable(onClick = onClick),
-        shape = RoundedCornerShape(18.dp),
-        colors = CardDefaults.cardColors(containerColor = accent.copy(alpha = 0.16f)),
+    Box(
+        modifier = modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(20.dp))
+            .background(
+                Brush.horizontalGradient(
+                    listOf(accent.copy(alpha = .27f), accent.copy(alpha = .15f)),
+                ),
+            )
+            .border(1.dp, Color.White.copy(alpha = .75f), RoundedCornerShape(20.dp))
+            .clickable(onClick = onClick)
+            .padding(horizontal = 12.dp, vertical = 11.dp),
     ) {
         Row(
-            modifier = Modifier.fillMaxWidth().padding(12.dp),
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(11.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Box(Modifier.width(4.dp).height(46.dp).background(accent, CircleShape))
+            Box(
+                modifier = Modifier
+                    .size(43.dp)
+                    .clip(RoundedCornerShape(15.dp))
+                    .background(Color.White.copy(alpha = .50f)),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(Icons.Default.EventNote, contentDescription = null, tint = LavenderUi.violet)
+            }
             Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                Text(event.title, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+                Text(
+                    event.title,
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.Bold,
+                    color = LavenderUi.ink,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                )
                 Text(
                     (if (showDate) eventDay(event).format(shortDay) + " · " else "") + eventTime(event),
                     style = MaterialTheme.typography.bodySmall,
+                    color = LavenderUi.ink,
                 )
                 if (event.notes.isNotBlank()) {
-                    Text(event.notes, style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Text(
+                        event.notes,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = LavenderUi.muted,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
                 }
+                Text(
+                    Authors.label(event.authorMask),
+                    modifier = Modifier
+                        .clip(CircleShape)
+                        .background(Color.White.copy(alpha = .47f))
+                        .padding(horizontal = 9.dp, vertical = 2.dp),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = LavenderUi.ink,
+                )
             }
-            Text(
-                Authors.label(event.authorMask),
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
         }
     }
 }
@@ -155,12 +195,29 @@ internal fun EventCard(
 @Composable
 private fun SectionTitle(title: String) {
     Row(
-        modifier = Modifier.fillMaxWidth().padding(top = 12.dp, bottom = 4.dp),
+        modifier = Modifier.fillMaxWidth().padding(top = 13.dp, bottom = 5.dp),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        horizontalArrangement = Arrangement.spacedBy(11.dp),
     ) {
-        Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-        HorizontalDivider(modifier = Modifier.weight(1f), color = MaterialTheme.colorScheme.primary.copy(alpha = 0.27f))
+        Text(
+            when (title) {
+                "Утро" -> "☼"
+                "Вечер" -> "☾"
+                else -> "✧"
+            },
+            color = LavenderUi.violet,
+            fontSize = 23.sp,
+        )
+        Text(
+            title,
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.Bold,
+            color = LavenderUi.ink,
+        )
+        HorizontalDivider(
+            modifier = Modifier.weight(1f),
+            color = LavenderUi.violet.copy(alpha = .34f),
+        )
     }
 }
 
@@ -170,6 +227,7 @@ internal fun CalendarDayView(
     events: List<CalendarEvent>,
     reactions: List<DailyReaction>,
     identity: Int,
+    onDate: (LocalDate) -> Unit,
     onOpen: (CalendarEvent) -> Unit,
     onHeart: (HeartColor) -> Unit,
     onMood: (String?) -> Unit,
@@ -178,22 +236,23 @@ internal fun CalendarDayView(
     val groups = listOf("Утро" to (0 until 12), "День" to (12 until 18), "Вечер" to (18 until 24))
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 100.dp),
-        verticalArrangement = Arrangement.spacedBy(10.dp),
+        contentPadding = PaddingValues(start = 11.dp, end = 11.dp, bottom = 90.dp),
+        verticalArrangement = Arrangement.spacedBy(9.dp),
     ) {
         item {
-            Text(
-                selectedDay.format(dateHeading).replaceFirstChar { it.titlecase(Locale.forLanguageTag("ru-RU")) },
-                style = MaterialTheme.typography.headlineSmall,
-                fontWeight = FontWeight.Bold,
-            )
+            LavenderWeekStrip(selectedDay, reactions, onDate)
         }
         if (selectedDay == LocalDate.now()) {
             item {
                 Text(
-                    "Сейчас " + java.time.LocalTime.now().format(timeFormat),
+                    "Сегодня",
+                    modifier = Modifier
+                        .clip(CircleShape)
+                        .background(LavenderUi.lavender.copy(alpha = .55f))
+                        .padding(horizontal = 13.dp, vertical = 6.dp),
                     style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.primary,
+                    color = LavenderUi.violet,
+                    fontWeight = FontWeight.SemiBold,
                 )
             }
         }
@@ -202,20 +261,45 @@ internal fun CalendarDayView(
             if (part.isNotEmpty()) {
                 item { SectionTitle(heading) }
                 items(part, key = { it.id }) { event ->
-                    Row(verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                        Text(
-                            Instant.ofEpochMilli(event.startsAtMillis).atZone(ZoneId.systemDefault()).format(timeFormat),
-                            modifier = Modifier.width(49.dp).padding(top = 12.dp),
-                            style = MaterialTheme.typography.labelMedium,
+                    Row(
+                        verticalAlignment = Alignment.Top,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        Column(
+                            modifier = Modifier.width(51.dp).padding(top = 12.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.spacedBy(6.dp),
+                        ) {
+                            Text(
+                                Instant.ofEpochMilli(event.startsAtMillis)
+                                    .atZone(ZoneId.systemDefault()).format(timeFormat),
+                                style = MaterialTheme.typography.labelMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = LavenderUi.ink,
+                            )
+                            Box(
+                                Modifier.size(9.dp)
+                                    .clip(CircleShape)
+                                    .background(LavenderUi.violet.copy(alpha = .70f)),
+                            )
+                        }
+                        EventCard(
+                            event = event,
+                            onClick = { onOpen(event) },
+                            modifier = Modifier.weight(1f),
                         )
-                        EventCard(event, onClick = { onOpen(event) }, modifier = Modifier.weight(1f))
                     }
                 }
             }
         }
         if (dayEvents.isEmpty()) {
             item {
-                Text("На этот день событий нет", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(vertical = 30.dp))
+                Text(
+                    "Пока никаких планов. Добавьте ваше первое событие на этот день.",
+                    color = LavenderUi.muted,
+                    style = MaterialTheme.typography.bodyMedium,
+                    modifier = Modifier.padding(18.dp),
+                )
             }
         }
         item {
@@ -239,7 +323,7 @@ internal fun CalendarWeekView(
 ) {
     val monday = selectedDay.minusDays((selectedDay.dayOfWeek.value - 1).toLong())
     val days = (0..6).map { monday.plusDays(it.toLong()) }
-    val cellWidth = 142.dp
+    val cellWidth = 114.dp
     val hourHeight = 62.dp
     val gridHeight = hourHeight * 24
     val scroll = rememberScrollState()
@@ -247,7 +331,7 @@ internal fun CalendarWeekView(
     val initialScroll = with(LocalDensity.current) { (hourHeight * 7).roundToPx() }
     Column(modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState(initial = initialScroll))) {
         Text(
-            "Нажмите на дату, чтобы выбрать день. Сетка прокручивается по горизонтали.",
+            "Листайте по горизонтали, чтобы увидеть всю неделю",
             modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
             style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -270,7 +354,7 @@ internal fun CalendarWeekView(
                     Surface(
                         modifier = Modifier.fillMaxWidth().height(48.dp).clickable { onDate(date) },
                         shape = RoundedCornerShape(14.dp),
-                        color = if (selected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f),
+                        color = if (selected) LavenderUi.lavender else Color.White.copy(alpha = .40f),
                     ) {
                         Box(contentAlignment = Alignment.Center) {
                             Text(
@@ -320,8 +404,8 @@ internal fun CalendarWeekView(
                                         .offset(x = width * lane, y = position.dp)
                                         .width(width)
                                         .height(duration.dp)
-                                        .background(accent.copy(alpha = 0.24f), RoundedCornerShape(10.dp))
-                                        .border(1.dp, accent.copy(alpha = 0.55f), RoundedCornerShape(10.dp))
+                                        .background(accent.copy(alpha = 0.32f), RoundedCornerShape(14.dp))
+                                        .border(1.dp, Color.White.copy(alpha = .70f), RoundedCornerShape(14.dp))
                                         .clickable { onOpen(event) }
                                         .padding(5.dp),
                                 ) {
@@ -353,68 +437,100 @@ internal fun CalendarMonthView(
     val window = dateWindow(selectedDay, CalendarView.MONTH)
     val days = (0 until java.time.temporal.ChronoUnit.DAYS.between(window.start, window.endExclusive).toInt())
         .map { window.start.plusDays(it.toLong()) }
-    val background = MaterialTheme.colorScheme.surface
-
-    Column(modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 10.dp)) {
+    Column(
+        modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState())
+            .padding(horizontal = 5.dp),
+    ) {
         Row(
-            modifier = Modifier.fillMaxWidth().padding(start = 6.dp, end = 6.dp, top = 8.dp),
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 7.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            FilterChip(selected = !showMoods, onClick = { showMoods = false }, label = { Text("События") })
+            FilterChip(selected = !showMoods, onClick = { showMoods = false }, label = { Text("События и сердечки") })
             FilterChip(selected = showMoods, onClick = { showMoods = true }, label = { Text("Настроения") })
         }
-        Card(shape = RoundedCornerShape(24.dp), colors = CardDefaults.cardColors(containerColor = background)) {
-            Column(modifier = Modifier.padding(horizontal = 5.dp, vertical = 10.dp)) {
+        Surface(
+            shape = RoundedCornerShape(26.dp),
+            color = Color.White.copy(alpha = .37f),
+            border = androidx.compose.foundation.BorderStroke(1.dp, Color.White.copy(alpha = .67f)),
+        ) {
+            Column(modifier = Modifier.padding(horizontal = 4.dp, vertical = 12.dp)) {
                 Row {
-                    listOf("Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс").forEach { label ->
-                        Box(Modifier.weight(1f).height(34.dp), contentAlignment = Alignment.Center) {
-                            Text(label, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.primary)
+                    listOf("Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс").forEachIndexed { index, label ->
+                        Box(Modifier.weight(1f).height(29.dp), contentAlignment = Alignment.Center) {
+                            Text(
+                                label,
+                                style = MaterialTheme.typography.labelMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = if (index >= 5) LavenderUi.violet else LavenderUi.ink,
+                            )
                         }
                     }
                 }
                 days.chunked(7).forEach { week ->
                     Row {
                         week.forEach { date ->
-                            val isCurrentMonth = date.month == selectedDay.month && date.year == selectedDay.year
+                            val currentMonth = date.month == selectedDay.month && date.year == selectedDay.year
                             val selected = date == selectedDay
                             val entries = reactions.filter { it.dateEpochDay == date.toEpochDay() }
                             val dateEvents = events.filter { eventDay(it) == date }
                             Column(
                                 modifier = Modifier
                                     .weight(1f)
-                                    .height(if (showMoods) 81.dp else 76.dp)
+                                    .height(if (showMoods) 85.dp else 74.dp)
                                     .padding(2.dp)
+                                    .clip(RoundedCornerShape(17.dp))
                                     .background(
-                                        if (selected) MaterialTheme.colorScheme.primaryContainer else Color.Transparent,
-                                        RoundedCornerShape(14.dp),
+                                        if (selected) LavenderUi.lavender.copy(alpha = .40f)
+                                        else Color.Transparent,
                                     )
                                     .clickable { onDate(date) }
                                     .padding(vertical = 5.dp),
                                 horizontalAlignment = Alignment.CenterHorizontally,
                                 verticalArrangement = Arrangement.spacedBy(3.dp),
                             ) {
-                                Text(
-                                    date.dayOfMonth.toString(),
-                                    style = MaterialTheme.typography.titleSmall,
-                                    fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
-                                    color = if (isCurrentMonth) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.32f),
-                                )
+                                Box(
+                                    modifier = Modifier
+                                        .size(32.dp)
+                                        .clip(CircleShape)
+                                        .background(
+                                            if (selected) LavenderUi.violet
+                                            else Color.Transparent,
+                                        ),
+                                    contentAlignment = Alignment.Center,
+                                ) {
+                                    Text(
+                                        date.dayOfMonth.toString(),
+                                        style = MaterialTheme.typography.titleSmall,
+                                        fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
+                                        color = if (selected) Color.White
+                                            else if (currentMonth) LavenderUi.ink
+                                            else LavenderUi.muted.copy(alpha = .40f),
+                                    )
+                                }
                                 if (showMoods) {
                                     Row(horizontalArrangement = Arrangement.spacedBy(1.dp)) {
-                                        listOf(Authors.SASHA, Authors.NASTYA).forEach { author ->
-                                            val mood = entries.firstOrNull { it.authorId == author }?.dayEmoji
-                                            Text(mood ?: "·", fontSize = 14.sp, maxLines = 1)
-                                        }
+                                        listOf(Authors.SASHA to LavenderUi.blue, Authors.NASTYA to LavenderUi.pink)
+                                            .forEach { (author, tint) ->
+                                                val mood = entries.firstOrNull { it.authorId == author }?.dayEmoji
+                                                if (mood != null) {
+                                                    LavenderMoodOrb(mood, tint, Modifier.size(25.dp))
+                                                }
+                                            }
                                     }
                                 } else {
                                     Row(horizontalArrangement = Arrangement.spacedBy(3.dp)) {
                                         dateEvents.map { it.authorMask }.distinct().take(3).forEach { author ->
-                                            Box(Modifier.width(7.dp).height(7.dp).background(eventColor(author), CircleShape))
+                                            Box(Modifier.size(6.dp).background(eventColor(author), CircleShape))
                                         }
                                     }
                                     if (entries.any { it.redHearts > 0 || it.pinkHearts > 0 }) {
-                                        Text("♥", color = Color(0xFFC764AD), fontSize = 13.sp, lineHeight = 14.sp)
+                                        Text(
+                                            "♥",
+                                            color = Color(0xFFCE60B9),
+                                            fontSize = 14.sp,
+                                            lineHeight = 14.sp,
+                                        )
                                     }
                                 }
                             }
@@ -423,24 +539,33 @@ internal fun CalendarMonthView(
                 }
             }
         }
-        Spacer(Modifier.height(14.dp))
-        SectionTitle(selectedDay.format(dateHeading).replaceFirstChar { it.titlecase(Locale.forLanguageTag("ru-RU")) })
-        val todayEvents = events.filter { eventDay(it) == selectedDay }
+        Spacer(Modifier.height(12.dp))
+        SectionTitle(
+            selectedDay.format(dateHeading).replaceFirstChar {
+                it.titlecase(Locale.forLanguageTag("ru-RU"))
+            },
+        )
+        val todayEvents = events.filter { eventDay(it) == selectedDay }.sortedBy { it.startsAtMillis }
         if (todayEvents.isEmpty()) {
-            Text("Нет событий", modifier = Modifier.padding(16.dp), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(
+                "На выбранный день нет событий",
+                modifier = Modifier.padding(16.dp),
+                style = MaterialTheme.typography.bodyMedium,
+                color = LavenderUi.muted,
+            )
         } else {
             todayEvents.forEach { event ->
                 EventCard(event = event, onClick = { onOpen(event) }, modifier = Modifier.padding(vertical = 4.dp))
             }
         }
-        Spacer(Modifier.height(12.dp))
+        Spacer(Modifier.height(8.dp))
         DayReactionsPanel(
             reactions = reactions.filter { it.dateEpochDay == selectedDay.toEpochDay() },
             actingAs = identity,
             onHeart = onHeart,
             onMood = onMood,
         )
-        Spacer(Modifier.height(105.dp))
+        Spacer(Modifier.height(90.dp))
     }
 }
 
@@ -451,27 +576,39 @@ internal fun CalendarAgendaView(
     onDate: (LocalDate) -> Unit,
     onOpen: (CalendarEvent) -> Unit,
 ) {
+    val daysWithEvents = (0 until 31)
+        .map { selectedDay.plusDays(it.toLong()) }
+        .filter { date -> date == selectedDay || events.any { eventDay(it) == date } }
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 10.dp),
-        verticalArrangement = Arrangement.spacedBy(10.dp),
+        contentPadding = PaddingValues(horizontal = 11.dp, vertical = 9.dp),
+        verticalArrangement = Arrangement.spacedBy(11.dp),
     ) {
-        items(31) { offset ->
-            val date = selectedDay.plusDays(offset.toLong())
+        items(daysWithEvents, key = { it.toString() }) { date ->
             val dayEvents = events.filter { eventDay(it) == date }.sortedBy { it.startsAtMillis }
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     TextButton(onClick = { onDate(date) }) {
                         Text(
-                            date.format(dateHeading).replaceFirstChar { it.titlecase(Locale.forLanguageTag("ru-RU")) },
+                            date.format(dateHeading).replaceFirstChar {
+                                it.titlecase(Locale.forLanguageTag("ru-RU"))
+                            },
                             style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.SemiBold,
+                            fontWeight = FontWeight.Bold,
                         )
                     }
-                    HorizontalDivider(modifier = Modifier.weight(1f), color = MaterialTheme.colorScheme.primary.copy(alpha = 0.25f))
+                    HorizontalDivider(
+                        modifier = Modifier.weight(1f),
+                        color = LavenderUi.violet.copy(alpha = .25f),
+                    )
                 }
                 if (dayEvents.isEmpty()) {
-                    Text("Нет событий", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(start = 12.dp, bottom = 12.dp))
+                    Text(
+                        "Нет событий",
+                        color = LavenderUi.muted,
+                        style = MaterialTheme.typography.bodySmall,
+                        modifier = Modifier.padding(start = 12.dp, bottom = 12.dp),
+                    )
                 } else {
                     dayEvents.forEach { event ->
                         EventCard(event, onClick = { onOpen(event) })
@@ -479,6 +616,6 @@ internal fun CalendarAgendaView(
                 }
             }
         }
-        item { Spacer(Modifier.height(90.dp)) }
+        item { Spacer(Modifier.height(85.dp)) }
     }
 }
