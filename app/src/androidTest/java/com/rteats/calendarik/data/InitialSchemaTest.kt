@@ -14,8 +14,8 @@ class InitialSchemaTest {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         val db = Room.inMemoryDatabaseBuilder(context, CalendarDatabase::class.java).build()
         try {
-            db.reactions().addHeart(42, Authors.SASHA, HeartColor.PINK, 12)
-            assertEquals(1L, db.reactions().get(42, Authors.SASHA)?.pinkHearts)
+            db.reactions().setHeart(42, Authors.SASHA, HeartColor.PINK, 12)
+            assertEquals(2, db.reactions().get(42, Authors.SASHA)?.heartChoice)
         } finally { db.close() }
     }
 }
