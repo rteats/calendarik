@@ -488,7 +488,7 @@ internal fun CalendarMonthView(
                             Column(
                                 modifier = Modifier
                                     .weight(1f)
-                                    .height(if (overlay == 2) 85.dp else 74.dp)
+                                    .height(if (overlay == 2) 105.dp else 74.dp)
                                     .padding(2.dp)
                                     .clip(RoundedCornerShape(17.dp))
                                     .background(
@@ -520,7 +520,10 @@ internal fun CalendarMonthView(
                                     )
                                 }
                                 if (overlay == 2) {
-                                    Row(horizontalArrangement = Arrangement.spacedBy(1.dp)) {
+                                    Column(
+                                        horizontalAlignment = Alignment.CenterHorizontally,
+                                        verticalArrangement = Arrangement.spacedBy(2.dp),
+                                    ) {
                                         listOf(Authors.SASHA to LavenderUi.blue, Authors.NASTYA to LavenderUi.pink)
                                             .forEach { (author, tint) ->
                                                 val mood = entries.firstOrNull { it.authorId == author }?.dayEmoji

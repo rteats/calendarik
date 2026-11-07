@@ -19,6 +19,7 @@ import androidx.glance.LocalSize
 import androidx.glance.appwidget.GlanceAppWidget
 import androidx.glance.appwidget.GlanceAppWidgetReceiver
 import androidx.glance.appwidget.SizeMode
+import androidx.glance.appwidget.lazy.LazyColumn
 import androidx.glance.appwidget.action.ActionCallback
 import androidx.glance.appwidget.action.actionRunCallback
 import androidx.glance.appwidget.action.actionStartActivity
@@ -110,8 +111,8 @@ private suspend fun loadWidgetData(context: Context, day: LocalDate, zone: ZoneI
     val db = CalendarDatabase.get(context)
     return WidgetData(
         day = day,
-        events = db.events().listForRange(start, end).sortedBy { it.startsAtMillis }.take(4),
-        upcoming = db.events().listUpcoming(end, 2),
+        events = db.events().listForRange(start, end).sortedBy { it.startsAtMillis },
+        upcoming = db.events().listUpcoming(end, Int.MAX_VALUE),
         reactions = db.reactions().forDay(day.toEpochDay()),
     )
 }
@@ -119,26 +120,28 @@ private suspend fun loadWidgetData(context: Context, day: LocalDate, zone: ZoneI
 internal data class WidgetLayout(
     val showSubtitle: Boolean,
     val showMoods: Boolean,
-    val todayLimit: Int,
-    val upcomingLimit: Int,
+    val showEvents: Boolean,
+    val upcomingDayLimit: Int,
 )
 
 internal fun widgetLayout(width: Int, height: Int): WidgetLayout = WidgetLayout(
     showSubtitle = width >= 190 && height >= 70,
     showMoods = height >= 120,
-    todayLimit = when {
-        height < 195 -> 0
-        height < 320 -> 1
-        height < 420 && width >= 220 -> 1
-        height < 420 -> 2
-        else -> 3
-    },
-    upcomingLimit = when {
+    showEvents = height >= 195,
+    upcomingDayLimit = when {
         width < 220 || height < 320 -> 0
         height < 440 -> 1
         else -> 2
     },
 )
+
+internal fun upcomingEventDays(
+    events: List<CalendarEvent>, zone: ZoneId, dayLimit: Int,
+): List<Pair<LocalDate, List<CalendarEvent>>> = events
+    .sortedBy { it.startsAtMillis }
+    .groupBy { Instant.ofEpochMilli(it.startsAtMillis).atZone(zone).toLocalDate() }
+    .toList()
+    .take(dayLimit)
 
 /** One responsive, navigable day agenda. Each installed widget stores its own day offset. */
 class AgendaWidget : GlanceAppWidget() {
@@ -184,6 +187,7 @@ private fun AgendaContent(
     val veryNarrow = size.width < 150.dp
     val narrow = size.width < 190.dp
     val today = LocalDate.now(zone)
+    val upcomingDays = upcomingEventDays(upcoming, zone, layout.upcomingDayLimit)
     val heading = when {
         veryNarrow -> day.dayOfMonth.toString()
         narrow -> day.format(shortDateFormatter)
@@ -259,7 +263,7 @@ private fun AgendaContent(
                 }
             }
         }
-        if (layout.todayLimit > 0) {
+        if (layout.showEvents) {
             Spacer(GlanceModifier.height(if (compact) 8.dp else 17.dp))
             Row(modifier = GlanceModifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 Text(if (day == today) "Планы на сегодня" else "Планы на день",
@@ -274,27 +278,38 @@ private fun AgendaContent(
                     Text("+", style = TextStyle(color = ColorProvider(violet), fontSize = 26.sp))
                 }
             }
-            if (events.isEmpty()) {
-                Text("Нет событий", style = TextStyle(color = ColorProvider(softText), fontSize = 12.sp))
-            } else {
-                events.take(layout.todayLimit).forEach { event ->
-                    WidgetEventRow(context, event, zone, compact)
+            LazyColumn(modifier = GlanceModifier.fillMaxWidth().defaultWeight()) {
+                if (events.isEmpty()) {
+                    item {
+                        Text("Нет событий", style = TextStyle(color = ColorProvider(softText), fontSize = 12.sp))
+                    }
+                } else {
+                    items(events.size) { index ->
+                        WidgetEventRow(context, events[index], zone, compact)
+                    }
                 }
-            }
-        }
-        if (layout.upcomingLimit > 0 && upcoming.isNotEmpty()) {
-            Spacer(GlanceModifier.height(17.dp))
-            Text("Планы на ближайшее время", maxLines = 1,
-                style = TextStyle(color = ColorProvider(ink), fontWeight = FontWeight.Bold,
-                    fontSize = 15.sp))
-            upcoming.take(layout.upcomingLimit).forEach { event ->
-                val eventDay = Instant.ofEpochMilli(event.startsAtMillis).atZone(zone).toLocalDate()
-                Box(modifier = GlanceModifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-                    Text(eventDay.format(upcomingDateFormatter),
-                        style = TextStyle(color = ColorProvider(violet), fontWeight = FontWeight.Bold,
-                            fontSize = 14.sp))
+                if (upcomingDays.isNotEmpty()) {
+                    item {
+                        Column {
+                            Spacer(GlanceModifier.height(17.dp))
+                            Text("Планы на ближайшее время", maxLines = 1,
+                                style = TextStyle(color = ColorProvider(ink), fontWeight = FontWeight.Bold,
+                                    fontSize = 15.sp))
+                        }
+                    }
+                    upcomingDays.forEach { (eventDay, dayEvents) ->
+                        item {
+                            Box(modifier = GlanceModifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+                                Text(eventDay.format(upcomingDateFormatter),
+                                    style = TextStyle(color = ColorProvider(violet), fontWeight = FontWeight.Bold,
+                                        fontSize = 14.sp))
+                            }
+                        }
+                        items(dayEvents.size) { index ->
+                            WidgetEventRow(context, dayEvents[index], zone)
+                        }
+                    }
                 }
-                WidgetEventRow(context, event, zone)
             }
         }
     }
